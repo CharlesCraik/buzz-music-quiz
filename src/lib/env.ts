@@ -1,21 +1,23 @@
-const e = import.meta.env;
+// IMPORTANT: always read env vars as `import.meta.env.VITE_NAME` directly.
+// Assigning `import.meta.env` to a variable makes Vite embed the WHOLE env
+// object (every VITE_* value, secrets included) into the public bundle.
+
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? '';
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? '';
 
 export const env = {
   // Local (same-browser tabs) mode is a dev-only convenience. Deployed builds always use
   // Supabase when it is configured, whatever VITE_TRANSPORT says.
-  transport: (!e.DEV && e.VITE_SUPABASE_URL && e.VITE_SUPABASE_ANON_KEY
+  transport: ((!import.meta.env.DEV && supabaseUrl && supabaseAnonKey) ||
+  import.meta.env.VITE_TRANSPORT === 'supabase'
     ? 'supabase'
-    : e.VITE_TRANSPORT === 'supabase'
-      ? 'supabase'
-      : 'local') as 'supabase' | 'local',
-  supabaseUrl: (e.VITE_SUPABASE_URL as string | undefined) ?? '',
-  supabaseAnonKey: (e.VITE_SUPABASE_ANON_KEY as string | undefined) ?? '',
-  spotifyClientId: (e.VITE_SPOTIFY_CLIENT_ID as string | undefined) ?? '',
+    : 'local') as 'supabase' | 'local',
+  supabaseUrl,
+  supabaseAnonKey,
   // Always the current site's /callback, so one build works locally and on Netlify.
   // Both URLs must be listed under Redirect URIs in the Spotify dashboard.
   spotifyRedirectUri: typeof window !== 'undefined' ? `${window.location.origin}/callback` : '',
-  spotifyWebPlayback: e.VITE_ENABLE_SPOTIFY_WEB_PLAYBACK !== 'false',
+  spotifyWebPlayback: import.meta.env.VITE_ENABLE_SPOTIFY_WEB_PLAYBACK !== 'false',
 };
 
 export const hasSupabase = () => !!(env.supabaseUrl && env.supabaseAnonKey);
-export const hasSpotify = () => !!env.spotifyClientId;

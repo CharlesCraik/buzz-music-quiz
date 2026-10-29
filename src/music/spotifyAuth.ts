@@ -20,13 +20,13 @@ const TOKEN_KEY = 'bb-spotify-token';
 const CLIENT_ID_KEY = 'bb-spotify-client-id';
 
 /**
- * Which Spotify app to sign in through. A host can paste the Client ID of their
- * own Spotify developer app (Development Mode apps only allow the owner + 5 listed
- * users, so each family can use their own). Falls back to the site's default app.
+ * Which Spotify app to sign in through. Every host must paste the Client ID of
+ * their OWN Spotify developer app; there is deliberately no site-wide default, so
+ * nobody can sign in through (or use) the site owner's app.
  * PKCE needs no client secret, so only the public Client ID is ever stored.
  */
 export function getSpotifyClientId(): string {
-  return load<string>(CLIENT_ID_KEY) || env.spotifyClientId;
+  return load<string>(CLIENT_ID_KEY) ?? '';
 }
 
 export function usingCustomSpotifyApp(): boolean {

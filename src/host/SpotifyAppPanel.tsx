@@ -8,8 +8,7 @@ import { getSpotifyClientId, isValidClientId, setSpotifyClientId, usingCustomSpo
  * so each family should create their own free app.
  */
 export function SpotifyAppPanel({ onChange }: { onChange: () => void }) {
-  const hasDefault = !!env.spotifyClientId;
-  const [open, setOpen] = useState(!hasDefault && !usingCustomSpotifyApp());
+  const [open, setOpen] = useState(!usingCustomSpotifyApp());
   const [draft, setDraft] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -20,24 +19,20 @@ export function SpotifyAppPanel({ onChange }: { onChange: () => void }) {
     return (
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span>
-          {custom
-            ? `Using your own Spotify app (${getSpotifyClientId().slice(0, 6)}…).`
-            : "Using this site's Spotify app."}
+          Using your Spotify app ({getSpotifyClientId().slice(0, 6)}…).
         </span>
         <button className="font-semibold underline" onClick={() => setOpen(true)}>
-          {custom ? 'Change' : 'Use my own Spotify app'}
+          Change
         </button>
-        {custom && hasDefault && (
-          <button
-            className="font-semibold underline"
-            onClick={() => {
-              setSpotifyClientId(null);
-              onChange();
-            }}
-          >
-            Use the default app
-          </button>
-        )}
+        <button
+          className="font-semibold underline"
+          onClick={() => {
+            setSpotifyClientId(null);
+            onChange();
+          }}
+        >
+          Remove from this browser
+        </button>
       </div>
     );
   }
@@ -58,7 +53,8 @@ export function SpotifyAppPanel({ onChange }: { onChange: () => void }) {
         onChange();
       }}
     >
-      <p className="font-display text-lg font-semibold">Use your own Spotify app (free, 3 minutes)</p>
+      <p className="font-display text-lg font-semibold">Connect your own Spotify app (free, 3 minutes)</p>
+      <p className="text-sm">Each host uses their own Spotify app and account. You only do this once per browser.</p>
       <ol className="list-decimal space-y-1 pl-5 text-sm">
         <li>
           Go to{' '}
@@ -109,7 +105,7 @@ export function SpotifyAppPanel({ onChange }: { onChange: () => void }) {
         <button className="btn-primary text-base" disabled={!draft.trim()}>
           Save Client ID
         </button>
-        {(hasDefault || custom) && (
+        {custom && (
           <button type="button" className="btn-ghost text-base" onClick={() => setOpen(false)}>
             Cancel
           </button>

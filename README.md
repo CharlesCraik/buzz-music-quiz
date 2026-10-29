@@ -109,23 +109,15 @@ You can add up to 5 people, but only the host needs to be listed.
 ### 3.3 Copy the Client ID
 
 1. Go to **Settings** → **Basic Information** and copy the **Client ID**.
-2. Put it in `.env.local`:
-
-   ```
-   VITE_SPOTIFY_CLIENT_ID=your-client-id
-   VITE_ENABLE_SPOTIFY_WEB_PLAYBACK=true
-   ```
+2. On `/host`, under **Music**, paste it into **Connect your own Spotify app** and click **Save Client ID**. It's stored only in that browser. There is deliberately no site-wide Client ID, so nobody else can sign in through your app.
 
 You do **not** need the Client Secret. The app uses the Authorization Code with PKCE flow, which is designed for browser apps, so no secret is used or stored. Never paste the secret into this project.
 
-### 3.4 Letting other families host (their own Spotify app)
+### 3.4 Other hosts
 
-Development Mode apps only allow the app owner plus 5 listed users. So other people hosting on your site should use **their own** free Spotify app:
+There is **no shared Spotify app**. Anyone hosting on your site follows the same steps with **their own** free Spotify app and their own Premium account. **Use my own Spotify app** on `/host` shows the steps and the redirect URI to copy. Your app and account are never offered to anyone else. **Remove from this browser** forgets the Client ID.
 
-1. On `/host`, under **Music**, click **Use my own Spotify app**.
-2. Follow the 4 steps shown: create an app at developer.spotify.com, tick Web API and Web Playback SDK, add the redirect URI shown (there's a copy button), and paste the app's **Client ID**.
-
-The Client ID is saved only in that browser. No client secret is ever needed or accepted. Each host then signs in with their own Spotify Premium account. **Use the default app** switches back.
+If other people ever use your laptop, click **Disconnect** under Music, so your Spotify sign-in isn't left in that browser.
 
 ### 3.5 Connect in the game
 
@@ -192,7 +184,6 @@ Netlify serves the static site. All realtime and AI work runs on Supabase, so th
    | `VITE_TRANSPORT` | `supabase` |
    | `VITE_SUPABASE_URL` | your Supabase URL |
    | `VITE_SUPABASE_ANON_KEY` | your anon/publishable key |
-   | `VITE_SPOTIFY_CLIENT_ID` | your Spotify Client ID |
    | `VITE_ENABLE_SPOTIFY_WEB_PLAYBACK` | `true` |
 
 4. Click **Deploy**.
