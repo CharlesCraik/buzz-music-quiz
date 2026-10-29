@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { shuffle } from '../game/ctx';
 import { ROUND_INFO } from '../game/rounds';
 import { ROUND_TYPES, type Question, type RoundType, type Settings, type Track } from '../game/types';
-import { env, hasSpotify } from '../lib/env';
+import { env } from '../lib/env';
+import { SpotifyAppPanel } from './SpotifyAppPanel';
 import { OpenAiKeyPanel } from './OpenAiKeyPanel';
 import { getMe, getMyPlaylists, getPlaylistTracks, type PlaylistSummary } from '../music/spotifyApi';
 import {
   disconnectSpotify,
+  hasSpotifyClient,
   isSpotifyConnected,
   startSpotifyLogin,
 } from '../music/spotifyAuth';
@@ -368,10 +370,16 @@ export default function HostSetup() {
         <div className="grid gap-6 lg:grid-cols-2">
           {/* 1. Music */}
           <Section n={1} title="Music" tone="bg-sky">
-            {!hasSpotify() ? (
-              <p className="chunky-sm bg-cream p-3">
-                Spotify isn't configured yet. Add <code>VITE_SPOTIFY_CLIENT_ID</code> (see README). You can still play with the built-in sample tunes.
-              </p>
+            <SpotifyAppPanel
+              onChange={() => {
+                setSpotifyOn(isSpotifyConnected());
+                setSpotifyName(null);
+                setPlaylists(null);
+                setSpotifyErr(null);
+              }}
+            />
+            {!hasSpotifyClient() ? (
+              <p className="text-sm">Without Spotify you can still play with the built-in sample tunes.</p>
             ) : spotifyOn ? (
               <div className="chunky-sm flex flex-wrap items-center justify-between gap-3 bg-cream p-3">
                 <div>
@@ -397,7 +405,9 @@ export default function HostSetup() {
                 <button className="btn-primary self-start" onClick={() => void startSpotifyLogin('/host')}>
                   Connect Spotify
                 </button>
-                <p className="text-sm">Only the host connects. Spotify Premium needed for in-browser playback.</p>
+                <p className="text-sm">
+                  Only the host connects, with their own Spotify account. Premium is needed for in-browser playback.
+                </p>
               </div>
             )}
             {spotifyOn && (

@@ -1,8 +1,9 @@
 import { normaliseAnswer } from '../game/normalise';
 import type { Question, Track } from '../game/types';
-import { env, hasSupabase } from '../lib/env';
+import { hasSupabase } from '../lib/env';
 import { load, save } from '../lib/storage';
 import { searchTrack } from '../music/spotifyApi';
+import { isSpotifyConnected } from '../music/spotifyAuth';
 import { ensureSignedIn, getSupabase } from '../realtime/supabaseTransport';
 import { hasOpenAiKey, requestPack } from './openai';
 import { GenerateResponseSchema, GeneratedSongSchema, type GenerateRequest } from './schema';
@@ -82,7 +83,7 @@ export async function generateMaterial(
       seenSongs.add(k);
       return true;
     });
-  if (songs.length > 0 && env.spotifyClientId) {
+  if (songs.length > 0 && isSpotifyConnected()) {
     onProgress(`Finding ${songs.length} songs on Spotify…`);
     // Look songs up 4 at a time.
     let next = 0;

@@ -118,7 +118,16 @@ You can add up to 5 people, but only the host needs to be listed.
 
 You do **not** need the Client Secret. The app uses the Authorization Code with PKCE flow, which is designed for browser apps, so no secret is used or stored. Never paste the secret into this project.
 
-### 3.4 Connect in the game
+### 3.4 Letting other families host (their own Spotify app)
+
+Development Mode apps only allow the app owner plus 5 listed users. So other people hosting on your site should use **their own** free Spotify app:
+
+1. On `/host`, under **Music**, click **Use my own Spotify app**.
+2. Follow the 4 steps shown: create an app at developer.spotify.com, tick Web API and Web Playback SDK, add the redirect URI shown (there's a copy button), and paste the app's **Client ID**.
+
+The Client ID is saved only in that browser. No client secret is ever needed or accepted. Each host then signs in with their own Spotify Premium account. **Use the default app** switches back.
+
+### 3.5 Connect in the game
 
 1. Restart `pnpm dev` and open <http://127.0.0.1:5173/host>.
 2. Click **Connect Spotify** and approve the permissions.

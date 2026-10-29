@@ -17,6 +17,38 @@ export const SPOTIFY_SCOPES = [
 ];
 
 const TOKEN_KEY = 'bb-spotify-token';
+const CLIENT_ID_KEY = 'bb-spotify-client-id';
+
+/**
+ * Which Spotify app to sign in through. A host can paste the Client ID of their
+ * own Spotify developer app (Development Mode apps only allow the owner + 5 listed
+ * users, so each family can use their own). Falls back to the site's default app.
+ * PKCE needs no client secret, so only the public Client ID is ever stored.
+ */
+export function getSpotifyClientId(): string {
+  return load<string>(CLIENT_ID_KEY) || env.spotifyClientId;
+}
+
+export function usingCustomSpotifyApp(): boolean {
+  return !!load<string>(CLIENT_ID_KEY);
+}
+
+export function setSpotifyClientId(id: string | null) {
+  const clean = (id ?? '').trim();
+  const prev = getSpotifyClientId();
+  if (clean) save(CLIENT_ID_KEY, clean);
+  else remove(CLIENT_ID_KEY);
+  // Tokens belong to a specific app: switching apps means signing in again.
+  if (getSpotifyClientId() !== prev) remove(TOKEN_KEY);
+}
+
+export function hasSpotifyClient(): boolean {
+  return !!getSpotifyClientId();
+}
+
+export function isValidClientId(id: string): boolean {
+  return /^[0-9a-f]{32}$/i.test(id.trim());
+}
 const VERIFIER_KEY = 'bb-spotify-verifier';
 const RETURN_KEY = 'bb-spotify-return';
 
@@ -52,7 +84,7 @@ export async function startSpotifyLogin(returnTo = '/host'): Promise<void> {
   const state = randomString(16);
   sessionStorage.setItem('bb-spotify-state', state);
   const params = new URLSearchParams({
-    client_id: env.spotifyClientId,
+    client_id: getSpotifyClientId(),
     response_type: 'code',
     redirect_uri: env.spotifyRedirectUri,
     code_challenge_method: 'S256',
@@ -67,7 +99,7 @@ async function tokenRequest(body: Record<string, string>): Promise<StoredToken> 
   const res = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: env.spotifyClientId, ...body }),
+    body: new URLSearchParams({ client_id: getSpotifyClientId(), ...body }),
   });
   const json = (await res.json()) as {
     access_token?: string;
