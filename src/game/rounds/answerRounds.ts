@@ -1,4 +1,14 @@
-import { applyStreaks, baseResults, noAudio, optionText, requestClip, type Ctx, type RoundHandler } from '../ctx';
+import {
+  applyStreaks,
+  baseResults,
+  LATE_GRACE_MS,
+  noAudio,
+  optionText,
+  requestClip,
+  type Ctx,
+  type RoundHandler,
+} from '../ctx';
+import { cappedPenalty } from '../scoring';
 import type { AnswerQState } from '../state';
 
 /** Ranked points for speed rounds (Fastest Finger, Intro Sprint). */
@@ -33,6 +43,13 @@ function makeHandler(kind: AnswerQState['kind'], ranked: boolean): RoundHandler<
         ctx.award(pid, pts, 'correct');
       }
     });
+    // Optional: lose points for a wrong or missed answer (never below zero).
+    const miss = ctx.s.settings.missPenalty;
+    if (miss > 0) {
+      for (const [pid, ok] of Object.entries(q.correct)) {
+        if (!ok) ctx.award(pid, cappedPenalty(ctx.s, pid, miss), q.answers[pid] ? 'wrong answer' : 'no answer');
+      }
+    }
     applyStreaks(ctx, q);
   }
 
@@ -86,7 +103,7 @@ function makeHandler(kind: AnswerQState['kind'], ranked: boolean): RoundHandler<
       if (q.done) return;
       const answered = Object.keys(q.answers).length > 0;
       const everyone = answered && ctx.connected().every((p) => q.answers[p.id]);
-      if (everyone || (q.deadline !== null && ctx.now >= q.deadline)) finish(ctx, q);
+      if (everyone || (q.deadline !== null && ctx.now >= q.deadline + LATE_GRACE_MS)) finish(ctx, q);
     },
 
     reveal(ctx, q) {

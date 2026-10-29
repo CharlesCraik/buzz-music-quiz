@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPack } from '../questions/buildPack';
 import { MOCK_TRACKS, SAMPLE_QUESTIONS } from '../questions/samplePack';
-import { QUESTION_SHOW_MS } from './ctx';
+import { LATE_GRACE_MS, QUESTION_SHOW_MS } from './ctx';
 import { canTransition, createGame, reduce } from './engine';
 import { sanitiseName, uniqueName } from './names';
 import { matchesAccepted, normaliseAnswer } from './normalise';
@@ -91,6 +91,9 @@ class Harness {
   }
   score(p: string) {
     return scoreOf(this.s, p);
+  }
+  scoreEvents() {
+    return this.s.scoreEvents;
   }
 }
 
@@ -190,8 +193,12 @@ describe('multiple choice', () => {
     h.startToQuestion();
     h.act('p1', { kind: 'answer', qid: h.qid, optionId: h.correct });
     h.advance(20_001);
+    expect(h.s.phase).toBe('QUESTION'); // grace window for answers in flight
+    h.act('p2', { kind: 'answer', qid: h.qid, optionId: h.correct });
+    h.advance(LATE_GRACE_MS);
     expect(h.s.phase).toBe('REVEAL');
     expect(h.score('p1')).toBe(100);
+    expect(h.score('p2')).toBe(100);
   });
 
   it('ignores duplicate envelopes (idempotency)', () => {
@@ -269,7 +276,7 @@ describe('name that tune', () => {
     const h = new Harness(['nameThatTune'], {}, ['p1', 'p2']);
     h.startToQuestion();
     h.act('p1', { kind: 'buzz', qid: h.qid });
-    h.advance(8001);
+    h.advance(8001 + LATE_GRACE_MS);
     expect((h.s.q as BuzzQState).lockedOut).toContain('p1');
     h.act('p2', { kind: 'buzz', qid: h.qid });
     h.act('p2', { kind: 'answer', qid: h.qid, optionId: h.wrongOpt });
@@ -458,7 +465,7 @@ describe('pause and presence', () => {
     h.host('resume');
     h.advance(14_000);
     expect(h.s.phase).toBe('QUESTION');
-    h.advance(1_001);
+    h.advance(1_001 + LATE_GRACE_MS);
     expect(h.s.phase).toBe('REVEAL');
     expect(h.score('p1')).toBe(0);
   });
@@ -677,5 +684,36 @@ describe('mini-games', () => {
     h.act('p1', { kind: 'answer', qid: h.qid, optionId: h.wrongOpt });
     h.act('p2', { kind: 'answer', qid: h.qid, optionId: h.wrongOpt });
     expect((h.s.q as SurvivalQState).lives).toEqual({ p1: 2, p2: 2 });
+  });
+});
+
+describe('miss penalty', () => {
+  it('wrong and missing answers lose points but never go below zero', () => {
+    const h = new Harness(['multipleChoice'], { missPenalty: 50 });
+    h.startToQuestion();
+    for (const p of ['p1', 'p2', 'p3']) h.act(p, { kind: 'answer', qid: h.qid, optionId: h.correct });
+    h.host('next');
+    // Q2: p1 wrong, p2 silent, p3 right.
+    h.act('p1', { kind: 'answer', qid: h.qid, optionId: h.wrongOpt });
+    h.act('p3', { kind: 'answer', qid: h.qid, optionId: h.correct });
+    h.advance(20_001 + LATE_GRACE_MS);
+    expect(h.score('p1')).toBe(50);
+    expect(h.score('p2')).toBe(50);
+    expect(h.score('p3')).toBe(200);
+    h.host('next');
+    // Q3: p1 and p2 wrong again: 50 -> 0, then stays at 0.
+    h.act('p1', { kind: 'answer', qid: h.qid, optionId: h.wrongOpt });
+    h.act('p2', { kind: 'answer', qid: h.qid, optionId: h.wrongOpt });
+    h.act('p3', { kind: 'answer', qid: h.qid, optionId: h.wrongOpt });
+    expect(h.score('p1')).toBe(0);
+    expect(h.score('p3')).toBe(150);
+  });
+
+  it('is off by default', () => {
+    const h = new Harness(['multipleChoice']);
+    h.startToQuestion();
+    h.act('p1', { kind: 'answer', qid: h.qid, optionId: h.wrongOpt });
+    h.advance(30_000);
+    expect(h.scoreEvents().filter((e) => e.delta < 0)).toHaveLength(0);
   });
 });

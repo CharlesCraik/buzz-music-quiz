@@ -27,7 +27,7 @@ A family music quiz party game in the spirit of the classic PS2 buzzer quizzes, 
 
 **Music timing:** a song is only requested once its question has been on screen for 1.5 seconds, so music never starts during a reveal or results screen. In every music round, the countdown, buzzers and answer buttons stay locked ("Get ready… the music is starting") until Spotify confirms the song is actually playing. A slow connection never eats into anyone's time. If a song doesn't start within 15 seconds, the host gets **Retry music** / **Play without music** buttons.
 
-The host picks 3–12 rounds, which round types, questions per round and timers. There are accessibility options for relaxed timers, reduced motion (no shaking, flashing or confetti) and high contrast. Colours always come with a shape and letter, so colour is never the only cue.
+The host picks 3–12 rounds, which round types, questions per round and timers. Optional **"Lose points for wrong or missed answers"** (−50, scores never go below 0). There are accessibility options for relaxed timers, reduced motion (no shaking, flashing or confetti) and high contrast. Colours always come with a shape and letter, so colour is never the only cue.
 
 ---
 
@@ -281,5 +281,7 @@ supabase/
 - Phones send actions through `submit_action()`, which stamps a server time and a global sequence number. Buzz order and Fastest Finger ranking use that sequence, never phone clocks.
 - The host keeps the question pack in its own memory. Phones only ever receive `PublicState`.
 - Timers run on a game clock that stops while the game is paused.
+- Answers still in flight when the clock hits zero get a 0.8s grace period.
+- The host de-duplicates actions by sequence number. Realtime push can deliver simultaneous answers out of order, so it never drops one for arriving "late", and it polls recent actions every 1.5s as a backup. Phones show **Sending…** until the TV confirms the answer, and resend automatically if needed.
 
 This is an original, Buzz-inspired ruleset with original art and sounds, made for private, non-commercial family use.

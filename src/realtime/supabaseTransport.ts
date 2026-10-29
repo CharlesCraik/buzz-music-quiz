@@ -11,6 +11,7 @@ import {
   type PlayerTransport,
   type SendResult,
 } from './transport';
+import { ActionInbox } from './inbox';
 
 let client: SupabaseClient | null = null;
 
@@ -59,7 +60,8 @@ export class SupabaseHostTransport implements HostTransport {
   private ch: RealtimeChannel | null = null;
   private code = '';
   private roomId = '';
-  private lastSeq = 0;
+  private inbox = new ActionInbox();
+  private pollTimer: number | null = null;
   private lastPersist = 0;
   private persistTimer: number | null = null;
   private pending: PublicState | null = null;
@@ -106,27 +108,28 @@ export class SupabaseHostTransport implements HostTransport {
         this.statusCb(mapStatus(status));
         if (status === 'SUBSCRIBED') {
           await this.ch!.track({ role: 'host', id: 'host' });
-          await this.catchUp();
+          await this.catchUp(500);
         }
       });
+    // Realtime push is fast but not guaranteed; poll recent actions as a safety net.
+    this.pollTimer = window.setInterval(() => void this.catchUp(150), 1500);
     return this.code;
   }
 
-  /** Fetch any actions missed while the socket was down. */
-  private async catchUp() {
+  /** Fetch the most recent actions and deliver any we haven't seen (push can drop or reorder). */
+  private async catchUp(limit: number) {
     const { data } = await getSupabase()
       .from('actions')
       .select('seq, room_id, player_uid, client_id, payload')
       .eq('room_id', this.roomId)
-      .gt('seq', this.lastSeq)
-      .order('seq', { ascending: true })
-      .limit(500);
-    for (const row of (data ?? []) as ActionRow[]) this.deliver(row);
+      .order('seq', { ascending: false })
+      .limit(limit);
+    const rows = ((data ?? []) as ActionRow[]).sort((a, b) => a.seq - b.seq);
+    for (const row of rows) this.deliver(row);
   }
 
   private deliver(row: ActionRow) {
-    if (row.seq <= this.lastSeq) return;
-    this.lastSeq = row.seq;
+    if (!this.inbox.accept(row.seq)) return;
     this.actionCb({ id: row.client_id, playerId: row.player_uid, seq: row.seq, action: row.payload });
   }
 
@@ -168,6 +171,8 @@ export class SupabaseHostTransport implements HostTransport {
   }
 
   async close(clearData: boolean) {
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    this.pollTimer = null;
     if (clearData && this.code) {
       await this.ch?.send({ type: 'broadcast', event: 'closed', payload: {} });
       await getSupabase().rpc('close_room', { p_code: this.code });

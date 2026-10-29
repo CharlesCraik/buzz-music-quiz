@@ -1,4 +1,4 @@
-import { applyStreaks, baseResults, noAudio, optionText, requestClip, type Ctx, type RoundHandler } from '../ctx';
+import { applyStreaks, baseResults, LATE_GRACE_MS, noAudio, optionText, requestClip, type Ctx, type RoundHandler } from '../ctx';
 import { cappedPenalty, scoreOf } from '../scoring';
 import type { BuzzQState } from '../state';
 
@@ -109,7 +109,7 @@ function makeHandler(kind: BuzzQState['kind']): RoundHandler<BuzzQState> {
 
       if (a.kind === 'buzz') {
         if (q.stage !== 'open' || q.lockedOut.includes(pid)) return;
-        if (q.deadline !== null && ctx.now >= q.deadline) return;
+        if (q.deadline !== null && ctx.now >= q.deadline + LATE_GRACE_MS) return;
         q.buzzOrder.push(pid);
         q.stage = 'answering';
         q.activeId = pid;
@@ -160,7 +160,7 @@ function makeHandler(kind: BuzzQState['kind']): RoundHandler<BuzzQState> {
 
     tick(ctx, q) {
       if (q.done) return;
-      if (q.stage === 'answering' && q.activeDeadline !== null && ctx.now >= q.activeDeadline) {
+      if (q.stage === 'answering' && q.activeDeadline !== null && ctx.now >= q.activeDeadline + LATE_GRACE_MS) {
         if (q.activeId) wrong(ctx, q, q.activeId);
         return;
       }
@@ -173,7 +173,7 @@ function makeHandler(kind: BuzzQState['kind']): RoundHandler<BuzzQState> {
         else finish(ctx, q);
         return;
       }
-      if (q.stage === 'open' && q.deadline !== null && ctx.now >= q.deadline) finish(ctx, q);
+      if (q.stage === 'open' && q.deadline !== null && ctx.now >= q.deadline + LATE_GRACE_MS) finish(ctx, q);
     },
 
     reveal(ctx, q) {

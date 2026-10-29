@@ -1,4 +1,4 @@
-import { baseResults, noAudio, requestClip, shuffle, type Ctx, type RoundHandler } from '../ctx';
+import { baseResults, LATE_GRACE_MS, noAudio, requestClip, shuffle, type Ctx, type RoundHandler } from '../ctx';
 import type { ChairsQState, MashQState, SurvivalQState } from '../state';
 import type { Track } from '../types';
 
@@ -348,7 +348,7 @@ export const lastStanding: RoundHandler<SurvivalQState> = {
 
   tick(ctx, q) {
     if (q.done) return;
-    if (q.stage === 'answering' && q.deadline !== null && ctx.now >= q.deadline) {
+    if (q.stage === 'answering' && q.deadline !== null && ctx.now >= q.deadline + LATE_GRACE_MS) {
       survivalResolve(ctx, q);
       return;
     }

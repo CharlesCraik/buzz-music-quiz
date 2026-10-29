@@ -641,6 +641,12 @@ export default function HostSetup() {
               hint="Off = the host presses Next (or Space) after each answer, so nobody feels rushed"
             />
             <Toggle on={!!settings.speedBonus} onChange={(v) => set({ speedBonus: v })} label="Speed bonus" hint="Quick Quiz: faster correct answers earn extra" />
+            <Toggle
+              on={(settings.missPenalty ?? 0) > 0}
+              onChange={(v) => set({ missPenalty: v ? 50 : 0 })}
+              label="Lose points for wrong or missed answers"
+              hint="−50 for a wrong or no answer in quiz and music rounds (never below 0)"
+            />
             <Toggle on={(settings.wrongPenalty ?? 50) > 0} onChange={(v) => set({ wrongPenalty: v ? 50 : 0 })} label="Wrong buzz penalty" hint="Lose 50 for a wrong buzz (never below zero)" />
             <Toggle on={!!settings.allowLateJoin} onChange={(v) => set({ allowLateJoin: v })} label="Allow late joiners" />
             <Toggle on={!!settings.reducedMotion} onChange={(v) => set({ reducedMotion: v })} label="Reduced motion" hint="No flashing, shaking or confetti" />

@@ -90,6 +90,19 @@ export function Controller({
     }
   };
 
+  // Delivery check: if the host hasn't registered our answer within 3s, send it again.
+  // (The host only ever counts one answer per player, so resending is safe.)
+  const confirmed = !!q && q.answered.includes(me.id);
+  const pendingAnswer = q && loc.answer && !confirmed && pub.phase === 'QUESTION' ? loc.answer : null;
+  useEffect(() => {
+    if (!q || !pendingAnswer) return;
+    const qid = q.qid;
+    const t = window.setInterval(() => {
+      void send({ kind: 'answer', qid, optionId: pendingAnswer });
+    }, 3000);
+    return () => clearInterval(t);
+  }, [q?.qid, pendingAnswer, send]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Haptic feedback on reveal.
   useEffect(() => {
     if (pub.phase !== 'REVEAL' || !pub.reveal || !q) return;
@@ -152,7 +165,10 @@ export function Controller({
           <Equaliser className="h-16 w-32" playing={false} />
         </Waiting>
       ) : done ? (
-        <Waiting title="Locked in!" sub="Fingers crossed… watch the TV.">
+        <Waiting
+          title={q.answered.includes(me.id) ? 'Locked in!' : 'Sending…'}
+          sub={q.answered.includes(me.id) ? 'Fingers crossed… watch the TV.' : 'Making sure the TV got your answer.'}
+        >
           {loc.answer && (
             <span
               className="chunky grid h-28 w-28 place-items-center font-display text-6xl font-bold"
@@ -333,7 +349,7 @@ export function Controller({
         );
       } else if (loc.answer || q.answered.includes(me.id)) {
         body = (
-          <Waiting title="Locked in!" sub="Hold your nerve…">
+          <Waiting title={q.answered.includes(me.id) ? 'Locked in!' : 'Sending…'} sub="Hold your nerve…">
             {hearts}
           </Waiting>
         );

@@ -100,6 +100,8 @@ export interface Settings {
   clipMs: number;
   points: number;
   wrongPenalty: number;
+  /** Points lost for a wrong or missing answer in answer rounds (0 = off). Never below zero. */
+  missPenalty: number;
   speedBonus: boolean;
   stealAmount: number;
   bombPenalty: number;
@@ -122,6 +124,7 @@ export const DEFAULT_SETTINGS: Settings = {
   clipMs: 25_000,
   points: 100,
   wrongPenalty: 50,
+  missPenalty: 0,
   speedBonus: false,
   stealAmount: 150,
   bombPenalty: 200,

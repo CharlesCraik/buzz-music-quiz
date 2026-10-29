@@ -72,6 +72,12 @@ export function noAudio() {
   };
 }
 
+/**
+ * Answers already on their way when the clock hits zero still count.
+ * Phones show the timer reaching 0 at the deadline; this covers network delay.
+ */
+export const LATE_GRACE_MS = 800;
+
 /** How long a question is on screen before its music is requested. */
 export const QUESTION_SHOW_MS = 1500;
 
