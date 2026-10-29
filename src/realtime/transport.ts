@@ -43,10 +43,13 @@ export const ERROR_TEXT: Record<string, string> = {
   NOT_IN_ROOM: 'You are not in this room any more. Re-join with the code.',
   RATE_LIMITED: 'Whoa, slow down! Too many taps.',
   NETWORK: 'Connection problem. Check your Wi-Fi or mobile data.',
+  ANON_DISABLED:
+    'The game server is not set up yet: the host needs to turn on "Allow anonymous sign-ins" in Supabase (Authentication → Sign In / Providers).',
 };
 
 export function errorCode(e: unknown): string {
   const msg = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
+  if (/anonymous sign-ins|anonymous_provider_disabled/i.test(msg)) return 'ANON_DISABLED';
   const known = Object.keys(ERROR_TEXT).find((k) => msg.includes(k));
   return known ?? 'NETWORK';
 }

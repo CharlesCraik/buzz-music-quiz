@@ -1,7 +1,13 @@
 const e = import.meta.env;
 
 export const env = {
-  transport: (e.VITE_TRANSPORT === 'supabase' ? 'supabase' : 'local') as 'supabase' | 'local',
+  // Local (same-browser tabs) mode is a dev-only convenience. Deployed builds always use
+  // Supabase when it is configured, whatever VITE_TRANSPORT says.
+  transport: (!e.DEV && e.VITE_SUPABASE_URL && e.VITE_SUPABASE_ANON_KEY
+    ? 'supabase'
+    : e.VITE_TRANSPORT === 'supabase'
+      ? 'supabase'
+      : 'local') as 'supabase' | 'local',
   supabaseUrl: (e.VITE_SUPABASE_URL as string | undefined) ?? '',
   supabaseAnonKey: (e.VITE_SUPABASE_ANON_KEY as string | undefined) ?? '',
   spotifyClientId: (e.VITE_SPOTIFY_CLIENT_ID as string | undefined) ?? '',
