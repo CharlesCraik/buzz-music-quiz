@@ -126,6 +126,21 @@ export default function HostGame() {
           </motion.div>
         </AnimatePresence>
 
+        {!pub.settings.autoAdvance &&
+          !pub.paused &&
+          (pub.phase === 'ROUND_INTRO' || pub.phase === 'REVEAL' || pub.phase === 'ROUND_RESULTS') && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.2 }}
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center"
+            >
+              <span className="chunky-sm bg-ink-3 px-4 py-1 font-display text-[clamp(0.8rem,1.2vw,1.5rem)] text-cream">
+                Host: press <strong className="text-sunflower">Space</strong> or <strong className="text-sunflower">Next ›</strong> when everyone's ready
+              </span>
+            </motion.div>
+          )}
+
         {pub.paused && (
           <div className="absolute inset-0 z-30 grid place-items-center bg-ink/70">
             <div className="chunky bg-sunflower px-[4vw] py-[3vh] text-center">

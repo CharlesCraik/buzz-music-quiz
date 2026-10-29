@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { buildPack } from '../questions/buildPack';
 import { MOCK_TRACKS, SAMPLE_QUESTIONS } from '../questions/samplePack';
+import { QUESTION_SHOW_MS } from './ctx';
 import { canTransition, createGame, reduce } from './engine';
 import { sanitiseName, uniqueName } from './names';
 import { matchesAccepted, normaliseAnswer } from './normalise';
 import { BINGO_POINTS, completedLines } from './rounds/musicBingo';
 import { FASTEST_POINTS } from './rounds/answerRounds';
 import { scoreOf, standings } from './scoring';
-import type { BingoQState, BombQState, BuzzQState, GameState } from './state';
+import type { BingoQState, BombQState, BuzzQState, ChairsQState, GameState, MashQState, SurvivalQState } from './state';
 import type { EngineEvent, PlayerAction, RoundType, Settings } from './types';
 import { toPublic } from './view';
 
@@ -70,11 +71,14 @@ class Harness {
     this.now += ms;
     return this.ev({ type: 'tick' });
   }
-  startToQuestion() {
+  startToQuestion(waitForMusic = true) {
     this.host('start');
     expect(this.s.phase).toBe('ROUND_INTRO');
     this.host('next');
     expect(this.s.phase).toBe('QUESTION');
+    // Step past the "question on screen" delay so the clip is requested.
+    const q = this.s.q!;
+    if (waitForMusic && q.audio === 'loading' && !q.audioRequested) this.advance(QUESTION_SHOW_MS + 1);
   }
   get qid() {
     return this.s.q!.qid;
@@ -547,15 +551,21 @@ describe('music gating', () => {
     expect(h.s.q!.deadline).not.toBeNull();
   });
 
-  it('preloads the first clip at the round intro and the next at each reveal', () => {
+  it('does not request the song until the question has been on screen', () => {
     const h = new Harness(['introSprint']);
-    h.host('start');
-    expect(h.effects).toContain('preload');
-    const before = h.effects.filter((e) => e === 'preload').length;
-    h.host('next');
+    h.autoAudio = false;
+    h.startToQuestion(false);
+    expect(h.plays).toHaveLength(0);
+    h.advance(1000);
+    expect(h.plays).toHaveLength(0);
+    h.advance(600);
+    expect(h.plays).toHaveLength(1);
+    // Never during a reveal: answer, reveal, and no new play is sent.
+    h.ev({ type: 'audio', key: h.plays[0], status: 'started' });
     for (const p of ['p1', 'p2', 'p3']) h.act(p, { kind: 'answer', qid: h.qid, optionId: h.correct });
     expect(h.s.phase).toBe('REVEAL');
-    expect(h.effects.filter((e) => e === 'preload').length).toBe(before + 1);
+    h.advance(5000);
+    expect(h.plays).toHaveLength(1);
   });
 
   it('bingo clip timer waits for the music too', () => {
@@ -563,10 +573,109 @@ describe('music gating', () => {
     h.autoAudio = false;
     h.startToQuestion();
     h.advance(2001);
+    h.advance(10);
     const q = h.s.q as BingoQState;
     expect(q.audio).toBe('loading');
     expect(q.clipEndsAt).toBeNull();
     h.ev({ type: 'audio', key: h.plays.at(-1)!, status: 'started' });
     expect((h.s.q as BingoQState).clipEndsAt).not.toBeNull();
+  });
+});
+
+describe('mini-games', () => {
+  function chairs() {
+    const h = new Harness(['musicalChairs'], {}, ['p1', 'p2', 'p3']);
+    h.startToQuestion();
+    h.advance(1600); // clip sent + auto-confirmed
+    expect((h.s.q as ChairsQState).stage).toBe('dancing');
+    return h;
+  }
+
+  it('musical chairs: tapping before the music stops knocks you out', () => {
+    const h = chairs();
+    h.act('p1', { kind: 'tap', qid: h.qid });
+    const q = h.s.q as ChairsQState;
+    expect(q.alive).not.toContain('p1');
+    expect(q.out[0]).toMatchObject({ playerId: 'p1', reason: 'early' });
+  });
+
+  it('musical chairs: slowest to sit is out, survivors score, last one wins', () => {
+    const h = chairs();
+    h.advance(16_000); // music stops
+    expect((h.s.q as ChairsQState).stage).toBe('sit');
+    expect(h.effects).toContain('stopAudio');
+    h.act('p3', { kind: 'tap', qid: h.qid });
+    h.act('p1', { kind: 'tap', qid: h.qid });
+    let q = h.s.q as ChairsQState;
+    expect(q.stage).toBe('result');
+    expect(q.alive).toEqual(['p1', 'p3']);
+    expect(h.score('p1')).toBe(50);
+    h.advance(3600); // next lap
+    h.advance(900);
+    expect((h.s.q as ChairsQState).stage).toBe('dancing');
+    h.advance(16_000);
+    h.act('p1', { kind: 'tap', qid: h.qid });
+    q = h.s.q as ChairsQState;
+    expect(q.alive).toEqual(['p1']);
+    h.advance(3600);
+    expect(h.s.phase).toBe('REVEAL');
+    expect(h.score('p1')).toBe(50 + 50 + 300);
+  });
+
+  it('musical chairs: if nobody sits, nobody goes out', () => {
+    const h = chairs();
+    h.advance(16_000);
+    h.advance(5_100);
+    expect((h.s.q as ChairsQState).alive).toHaveLength(3);
+  });
+
+  it('beat mash: highest running total wins, counts never go backwards and are capped', () => {
+    const h = new Harness(['beatMash']);
+    h.startToQuestion();
+    h.act('p1', { kind: 'tap', qid: h.qid, count: 5 }); // still loading: ignored
+    h.advance(1600);
+    expect((h.s.q as MashQState).stage).toBe('mashing');
+    h.act('p1', { kind: 'tap', qid: h.qid, count: 40 });
+    h.act('p1', { kind: 'tap', qid: h.qid, count: 30 });
+    h.act('p2', { kind: 'tap', qid: h.qid, count: 9999 });
+    h.act('p3', { kind: 'tap', qid: h.qid, count: 12 });
+    const q = h.s.q as MashQState;
+    expect(q.counts.p1).toBe(40);
+    expect(q.counts.p2).toBe(250);
+    h.advance(10_900);
+    expect(h.s.phase).toBe('REVEAL');
+    expect(h.score('p2')).toBe(200);
+    expect(h.score('p1')).toBe(150);
+    expect(h.score('p3')).toBe(100);
+  });
+
+  it('last one standing: wrong answers cost lives, last survivor wins', () => {
+    const h = new Harness(['lastStanding'], {}, ['p1', 'p2']);
+    h.startToQuestion();
+    const round = () => {
+      h.act('p1', { kind: 'answer', qid: h.qid, optionId: h.correct });
+      h.act('p2', { kind: 'answer', qid: h.qid, optionId: h.wrongOpt });
+    };
+    round();
+    let q = h.s.q as SurvivalQState;
+    expect(q.stage).toBe('result');
+    expect(q.lives).toEqual({ p1: 2, p2: 1 });
+    expect(toPublic(h.s, h.now).question!.survival!.correctOptionId).toBe(q.question!.correctOptionId);
+    h.advance(4100);
+    round();
+    q = h.s.q as SurvivalQState;
+    expect(q.lives.p2).toBe(0);
+    h.advance(4100);
+    expect(h.s.phase).toBe('REVEAL');
+    expect(h.score('p1')).toBe(50 + 50 + 300);
+  });
+
+  it('last one standing: if everyone is wrong nobody loses a life, and answers stay hidden while answering', () => {
+    const h = new Harness(['lastStanding'], {}, ['p1', 'p2']);
+    h.startToQuestion();
+    expect(toPublic(h.s, h.now).question!.survival!.correctOptionId).toBeNull();
+    h.act('p1', { kind: 'answer', qid: h.qid, optionId: h.wrongOpt });
+    h.act('p2', { kind: 'answer', qid: h.qid, optionId: h.wrongOpt });
+    expect((h.s.q as SurvivalQState).lives).toEqual({ p1: 2, p2: 2 });
   });
 });

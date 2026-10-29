@@ -72,9 +72,7 @@ export function useHostGame(): HostGame {
             });
             break;
           }
-          case 'preload':
-            void music.preload(e.uri, e.startMs);
-            break;
+
           case 'pauseAudio':
             void music.pause();
             break;

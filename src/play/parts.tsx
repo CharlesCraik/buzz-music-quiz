@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { BingoCell } from '../game/state';
 import type { PublicPlayer } from '../game/view';
 import { Avatar } from '../ui/Avatar';
@@ -106,7 +106,17 @@ export function AnswerPad({
   );
 }
 
-export function Buzzer({ onBuzz, disabled, colour }: { onBuzz: () => void; disabled?: boolean; colour: string }) {
+export function Buzzer({
+  onBuzz,
+  disabled,
+  colour,
+  label = 'BUZZ!',
+}: {
+  onBuzz: () => void;
+  disabled?: boolean;
+  colour: string;
+  label?: string;
+}) {
   return (
     <div className="relative grid flex-1 place-items-center">
       {!disabled && (
@@ -117,7 +127,7 @@ export function Buzzer({ onBuzz, disabled, colour }: { onBuzz: () => void; disab
         />
       )}
       <Pad
-        label="Buzz"
+        label={label}
         onPress={onBuzz}
         disabled={disabled}
         className={`relative grid aspect-square place-items-center rounded-full! ${disabled ? 'opacity-40' : ''}`}
@@ -127,7 +137,7 @@ export function Buzzer({ onBuzz, disabled, colour }: { onBuzz: () => void; disab
           boxShadow: '0 10px 0 0 #1b1f3b',
         }}
       >
-        <span className="font-display text-[clamp(2.5rem,14vw,5rem)] font-bold text-ink">BUZZ!</span>
+        <span className="font-display text-[clamp(2.5rem,14vw,5rem)] font-bold text-ink">{label}</span>
       </Pad>
     </div>
   );
@@ -219,4 +229,60 @@ export function BingoCard({
 
 export function Center({ children }: { children: ReactNode }) {
   return <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 text-center">{children}</div>;
+}
+
+/**
+ * Beat Mash pad: counts taps locally (instant feedback) and sends the running
+ * total a few times a second, so we stay well under the server rate limit.
+ */
+export function MashPad({
+  active,
+  colour,
+  onTotal,
+}: {
+  active: boolean;
+  colour: string;
+  onTotal: (count: number) => void;
+}) {
+  const [count, setCount] = useState(0);
+  const countRef = useRef(0);
+  const sentRef = useRef(0);
+  const cb = useRef(onTotal);
+  cb.current = onTotal;
+
+  useEffect(() => {
+    const flush = () => {
+      if (countRef.current !== sentRef.current) {
+        sentRef.current = countRef.current;
+        cb.current(countRef.current);
+      }
+    };
+    const t = window.setInterval(flush, 350);
+    return () => {
+      clearInterval(t);
+      flush();
+    };
+  }, []);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
+      <p className="font-display text-[clamp(3rem,18vw,6rem)] leading-none font-bold tabular-nums">{count}</p>
+      <button
+        type="button"
+        aria-label="Mash"
+        disabled={!active}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          if (!active) return;
+          countRef.current += 1;
+          setCount(countRef.current);
+          if (countRef.current % 5 === 0) vibrate(8);
+        }}
+        className={`chunky press grid aspect-square place-items-center rounded-full! select-none ${active ? '' : 'opacity-40'}`}
+        style={{ width: 'min(78vw, 48dvh)', background: colour, boxShadow: '0 10px 0 0 #1b1f3b' }}
+      >
+        <span className="font-display text-[clamp(2.5rem,14vw,5rem)] font-bold text-ink">{active ? 'MASH!' : 'WAIT…'}</span>
+      </button>
+    </div>
+  );
 }

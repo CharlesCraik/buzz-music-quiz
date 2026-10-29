@@ -35,10 +35,31 @@ export async function generateMaterial(
   playlistTracks: Track[] = [],
   onProgress: (msg: string) => void = () => {},
 ): Promise<GeneratedMaterial> {
-  onProgress('Asking the quiz writer for questions…');
+  onProgress(`Writing ${req.count} questions${req.songCount ? ` and picking ${req.songCount} songs` : ''}… (about a minute)`);
   const avoid = recentPrompts().slice(0, 60);
-  const data = await requestPack({ ...req, avoidPrompts: avoid });
-  const parsed = GenerateResponseSchema.safeParse(data);
+  // Two half-size requests in parallel: faster than one big one, and each covers different ground.
+  const half = (n: number, i: number) => (i === 0 ? Math.ceil(n / 2) : Math.floor(n / 2));
+  const splitList = (xs: string[], i: number) => (xs.length > 1 ? xs.filter((_, k) => k % 2 === i) : xs);
+  const batches = await Promise.allSettled(
+    [0, 1].map((i) =>
+      requestPack({
+        ...req,
+        count: Math.max(4, half(req.count, i)),
+        songCount: half(req.songCount, i),
+        avoidPrompts: avoid,
+        batchNote:
+          req.mode === 'category'
+            ? `This is batch ${i + 1} of 2. Focus mainly on: ${[...splitList(req.categories, i), ...splitList(req.decades, i)].join(', ') || 'a broad mix'}.`
+            : `This is batch ${i + 1} of 2. Focus mainly on songs ${i === 0 ? 'in the first half' : 'in the second half'} of the list.`,
+      }),
+    ),
+  );
+  const ok = batches.filter((b): b is PromiseFulfilledResult<Awaited<ReturnType<typeof requestPack>>> => b.status === 'fulfilled');
+  if (ok.length === 0) throw (batches[0] as PromiseRejectedResult).reason;
+  const parsed = GenerateResponseSchema.safeParse({
+    questions: ok.flatMap((b) => b.value.questions),
+    songs: ok.flatMap((b) => b.value.songs),
+  });
   if (!parsed.success) throw new Error('The quiz writer returned something unexpected. Try again.');
 
   onProgress('Checking questions…');
@@ -50,23 +71,36 @@ export async function generateMaterial(
   // Category mode: resolve suggested songs on Spotify, dropping anything not found.
   const tracks: Track[] = [...playlistTracks];
   const unresolved: string[] = [];
+  const seenSongs = new Set<string>();
   const songs = parsed.data.songs
     .map((s) => GeneratedSongSchema.safeParse(s))
     .filter((r) => r.success)
-    .map((r) => r.data!);
+    .map((r) => r.data!)
+    .filter((s) => {
+      const k = `${normaliseAnswer(s.title)}|${normaliseAnswer(s.artist)}`;
+      if (seenSongs.has(k)) return false;
+      seenSongs.add(k);
+      return true;
+    });
   if (songs.length > 0 && env.spotifyClientId) {
     onProgress(`Finding ${songs.length} songs on Spotify…`);
-    for (const song of songs) {
-      try {
-        const t = await searchTrack(song.title, song.artist);
-        const artistOk =
-          t && t.artists.some((a) => normaliseAnswer(a).includes(normaliseAnswer(song.artist).split(' ')[0]));
-        if (t && artistOk && !tracks.some((x) => x.id === t.id)) tracks.push(t);
-        else unresolved.push(`${song.title} — ${song.artist}`);
-      } catch {
-        unresolved.push(`${song.title} — ${song.artist}`);
+    // Look songs up 4 at a time.
+    let next = 0;
+    const worker = async () => {
+      while (next < songs.length) {
+        const song = songs[next++];
+        try {
+          const t = await searchTrack(song.title, song.artist);
+          const artistOk =
+            t && t.artists.some((a) => normaliseAnswer(a).includes(normaliseAnswer(song.artist).split(' ')[0]));
+          if (t && artistOk && !tracks.some((x) => x.id === t.id)) tracks.push(t);
+          else unresolved.push(`${song.title} — ${song.artist}`);
+        } catch {
+          unresolved.push(`${song.title} — ${song.artist}`);
+        }
       }
-    }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
   }
   return { questions: report.accepted, tracks, report, unresolvedSongs: unresolved };
 }

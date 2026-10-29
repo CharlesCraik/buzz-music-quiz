@@ -3,6 +3,7 @@ import type { RoundType } from '../types';
 import { decadeDash, fastestFinger, introSprint, multipleChoice, whoSings } from './answerRounds';
 import { nameThatTune, stealPoints } from './buzzRounds';
 import { musicBingo } from './musicBingo';
+import { beatMash, lastStanding, musicalChairs } from './miniGames';
 import { passTheBomb } from './passTheBomb';
 
 export const HANDLERS: Record<RoundType, RoundHandler> = {
@@ -14,6 +15,9 @@ export const HANDLERS: Record<RoundType, RoundHandler> = {
   decadeDash: decadeDash as RoundHandler,
   stealPoints: stealPoints as RoundHandler,
   passTheBomb: passTheBomb as RoundHandler,
+  musicalChairs: musicalChairs as RoundHandler,
+  beatMash: beatMash as RoundHandler,
+  lastStanding: lastStanding as RoundHandler,
   musicBingo: musicBingo as RoundHandler,
 };
 
@@ -84,6 +88,29 @@ export const ROUND_INFO: Record<RoundType, RoundInfo> = {
     tagline: "Don't be holding it when it blows!",
     rules:
       'Answer correctly to pass the bomb to someone else. Wrong answers mean another question. The fuse is secret.',
+    needs: 'questions',
+    audio: false,
+  },
+  musicalChairs: {
+    title: 'Musical Chairs',
+    tagline: 'When the music stops… SIT!',
+    rules:
+      'Dance while the music plays. When it stops, tap SIT as fast as you can. One chair fewer than players: the slowest is out. Tap before the music stops and you are out too!',
+    needs: 'tracks',
+    audio: true,
+  },
+  beatMash: {
+    title: 'Beat Mash',
+    tagline: 'Tap like your life depends on it!',
+    rules: 'When the music starts, tap the big button as fast as you can for 10 seconds. Most taps wins: 200, 150, 100, 50.',
+    needs: 'tracks',
+    audio: true,
+  },
+  lastStanding: {
+    title: 'Last One Standing',
+    tagline: 'Two lives. One winner.',
+    rules:
+      'Everyone answers every question. Wrong or too slow loses a life. Lose both and you are out. Last player standing wins 300!',
     needs: 'questions',
     audio: false,
   },

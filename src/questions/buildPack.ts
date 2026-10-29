@@ -128,6 +128,9 @@ export function buildPack(input: PackInput, rng: Rng = Math.random): GamePack {
 
   const rounds: RoundPlan[] = input.roundTypes.map((type) => {
     const info = ROUND_INFO[type];
+    if (type === 'musicalChairs' || type === 'beatMash') {
+      return { type, questions: [], tracks: shuffle(trackPool, rng).slice(0, 12) };
+    }
     if (type === 'musicBingo') {
       const size = Math.min(trackPool.length, Math.max(CARD_SIZE + 3, input.bingoPoolSize ?? 14));
       return { type, questions: [], tracks: shuffle(trackPool, rng).slice(0, size) };
@@ -149,7 +152,8 @@ export function buildPack(input: PackInput, rng: Rng = Math.random): GamePack {
       return { type, questions, tracks: [] };
     }
     // Pass the Bomb burns through questions fast: give it a bigger pool.
-    const want = type === 'passTheBomb' ? Math.max(12, input.questionsPerRound * 3) : input.questionsPerRound;
+    const want =
+      type === 'passTheBomb' || type === 'lastStanding' ? Math.max(15, input.questionsPerRound * 3) : input.questionsPerRound;
     const questions: Question[] = [];
     for (let i = 0; i < want && textPool.length > 0; i++) {
       questions.push(textPool[textCursor % textPool.length]);
@@ -177,6 +181,9 @@ export function feasibleRounds(questions: Question[], tracks: Track[]): Record<R
     introSprint: tracks.length >= 4,
     whoSings: new Set(tracks.map((t) => normaliseAnswer(t.artists.join(', ')))).size >= 4,
     decadeDash: tracks.some((t) => !!t.year && t.year >= 1950),
+    musicalChairs: tracks.length > 0,
+    beatMash: tracks.length > 0,
+    lastStanding: questions.length > 0,
     musicBingo: tracks.length >= CARD_SIZE,
   };
 }

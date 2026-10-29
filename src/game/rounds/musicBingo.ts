@@ -42,10 +42,6 @@ export function bingoStartMs(track: Track, clipMs: number): number {
   return Math.max(0, Math.min(len - clipMs - 5000, Math.round(len * 0.3)));
 }
 
-function preloadClip(ctx: Ctx, q: BingoQState, index: number) {
-  const track = q.pool.find((t) => t.id === q.playOrder[index]);
-  if (track) ctx.fx.push({ type: 'preload', uri: track.uri, startMs: bingoStartMs(track, q.durationMs) });
-}
 
 export const musicBingo: RoundHandler<BingoQState> = {
   questionCount(plan) {
@@ -88,7 +84,6 @@ export const musicBingo: RoundHandler<BingoQState> = {
       linesAwarded: {},
       ...noAudio(),
     };
-    preloadClip(ctx, q, 0);
     return q;
   },
 
@@ -153,7 +148,6 @@ export const musicBingo: RoundHandler<BingoQState> = {
       q.audio = 'none';
       q.gapUntil = ctx.now + BETWEEN_CLIPS_MS;
       ctx.fx.push({ type: 'stopAudio' });
-      if (q.clipIndex + 1 < q.playOrder.length) preloadClip(ctx, q, q.clipIndex + 1);
       return;
     }
     if (q.gapUntil !== null && ctx.now >= q.gapUntil) {
@@ -167,7 +161,7 @@ export const musicBingo: RoundHandler<BingoQState> = {
       const track = q.pool.find((t) => t.id === q.playOrder[q.clipIndex]);
       if (track) {
         // Clip timer starts in onAudioStarted, once the song is actually audible.
-        requestClip(ctx, q, track.uri, bingoStartMs(track, q.durationMs), q.durationMs + 5000);
+        requestClip(ctx, q, track.uri, bingoStartMs(track, q.durationMs), q.durationMs + 5000, 0);
       } else {
         this.onAudioStarted!(ctx, q);
       }

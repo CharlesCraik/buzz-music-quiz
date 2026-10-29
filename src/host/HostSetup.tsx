@@ -39,15 +39,39 @@ const CATEGORIES = [
   'Pop',
   'Rock',
   'Indie',
+  'Britpop',
   'Dance',
+  'Electronic',
+  'Disco & Funk',
   'Hip-hop',
+  'Rap',
   'Soul & R&B',
+  'Motown',
+  'Reggae',
   'Country',
+  'Folk',
+  'Blues',
+  'Jazz',
+  'Classical',
+  'Metal',
+  'Punk',
+  'Grunge',
+  'Emo & pop-punk',
+  'K-pop',
+  'Latin',
+  'Afrobeats',
+  'Eurovision',
   'Musicals',
-  'Film & TV',
+  'Film soundtracks',
+  'TV themes',
   'Disney',
+  'Video game music',
+  'Christmas',
+  'Kids & family',
   'Boy & girl bands',
   'One-hit wonders',
+  'Love songs',
+  'Party anthems',
 ];
 const DECADES = ['60s', '70s', '80s', '90s', '2000s', '2010s', '2020s'];
 
@@ -60,6 +84,9 @@ const ROUND_EMOJI: Record<RoundType, string> = {
   decadeDash: 'DECADE',
   stealPoints: 'STEAL',
   passTheBomb: 'BOMB',
+  musicalChairs: 'CHAIRS',
+  beatMash: 'MASH',
+  lastStanding: 'SURVIVE',
   musicBingo: 'BINGO',
 };
 
@@ -137,7 +164,7 @@ export default function HostSetup() {
   const [source, setSource] = useState<Source>('sample');
   const [categories, setCategories] = useState<string[]>(['Pop', 'Rock']);
   const [decades, setDecades] = useState<string[]>(['80s', '90s', '2000s']);
-  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard' | 'mixed'>('mixed');
+  const [difficulties, setDifficulties] = useState<('easy' | 'medium' | 'hard')[]>(['easy', 'medium']);
   const [familyFriendly, setFamilyFriendly] = useState(true);
   const [material, setMaterial] = useState<Material | null>({
     title: 'Sample pack',
@@ -158,6 +185,7 @@ export default function HostSetup() {
   const [qpr, setQpr] = useState(5);
   const [settings, setSettings] = useState<Partial<Settings>>({
     timerMultiplier: 1,
+    autoAdvance: false,
     speedBonus: false,
     allowLateJoin: true,
     reducedMotion: false,
@@ -178,10 +206,6 @@ export default function HostSetup() {
     return Array.from({ length: roundCount }, (_, i) => order[i % order.length]);
   }, [enabled, feasible, randomOrder, roundCount]);
 
-  const textQuestionsNeeded = roundPlan.reduce(
-    (n, t) => n + (ROUND_INFO[t].needs === 'questions' ? (t === 'passTheBomb' ? Math.max(12, qpr * 3) : qpr) : 0),
-    0,
-  );
 
   function pickSource(s: Source) {
     setSource(s);
@@ -225,16 +249,16 @@ export default function HostSetup() {
     setError(null);
     setNotes([]);
     try {
-      const count = Math.min(40, Math.max(12, textQuestionsNeeded + 4));
-      const tracksForAi = shuffle(playlistTracks, Math.random).slice(0, 60);
+      const count = 64;
+      const tracksForAi = shuffle(playlistTracks, Math.random).slice(0, 80);
       const res = await generateMaterial(
         {
           mode: source === 'playlist' ? 'playlist' : 'category',
           categories,
           decades,
-          difficulty,
+          difficulties,
           count,
-          songCount: source === 'category' ? 24 : 0,
+          songCount: source === 'category' ? 52 : 0,
           familyFriendly,
           tracks:
             source === 'playlist'
@@ -476,10 +500,18 @@ export default function HostSetup() {
                     </Chip>
                   ))}
                 </div>
-                <span className="label">Difficulty</span>
+                <span className="label">Difficulty (pick one or more to mix)</span>
                 <div className="flex flex-wrap gap-2">
-                  {(['easy', 'mixed', 'medium', 'hard'] as const).map((d) => (
-                    <Chip key={d} on={difficulty === d} onClick={() => setDifficulty(d)}>
+                  {(['easy', 'medium', 'hard'] as const).map((d) => (
+                    <Chip
+                      key={d}
+                      on={difficulties.includes(d)}
+                      onClick={() =>
+                        setDifficulties((ds) =>
+                          ds.includes(d) ? (ds.length > 1 ? ds.filter((x) => x !== d) : ds) : [...ds, d],
+                        )
+                      }
+                    >
                       {d[0].toUpperCase() + d.slice(1)}
                     </Chip>
                   ))}
@@ -565,8 +597,8 @@ export default function HostSetup() {
           <div className="grid gap-4 md:grid-cols-3">
             <div className="flex flex-col gap-2">
               <span className="label">Number of rounds</span>
-              <div className="flex gap-2">
-                {[4, 6, 8].map((n) => (
+              <div className="flex flex-wrap gap-2">
+                {[3, 4, 5, 6, 8, 10, 12].map((n) => (
                   <Chip key={n} on={roundCount === n} onClick={() => setRoundCount(n)}>
                     {n}
                   </Chip>
@@ -602,6 +634,12 @@ export default function HostSetup() {
           </div>
           <div className="grid gap-x-8 gap-y-1 md:grid-cols-2">
             <Toggle on={randomOrder} onChange={setRandomOrder} label="Shuffle round order" />
+            <Toggle
+              on={!!settings.autoAdvance}
+              onChange={(v) => set({ autoAdvance: v })}
+              label="Auto-advance"
+              hint="Off = the host presses Next (or Space) after each answer, so nobody feels rushed"
+            />
             <Toggle on={!!settings.speedBonus} onChange={(v) => set({ speedBonus: v })} label="Speed bonus" hint="Quick Quiz: faster correct answers earn extra" />
             <Toggle on={(settings.wrongPenalty ?? 50) > 0} onChange={(v) => set({ wrongPenalty: v ? 50 : 0 })} label="Wrong buzz penalty" hint="Lose 50 for a wrong buzz (never below zero)" />
             <Toggle on={!!settings.allowLateJoin} onChange={(v) => set({ allowLateJoin: v })} label="Allow late joiners" />

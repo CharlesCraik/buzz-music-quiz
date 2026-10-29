@@ -11,7 +11,6 @@ import { getSpotifyToken } from './spotifyAuth';
  * - play() only resolves ok once the SDK reports the track is actually playing,
  *   so the game can hold its timers until the music is audible.
  * - Lost devices are re-transferred and the request retried.
- * - preload() buffers the next clip muted + paused so it starts instantly.
  */
 
 interface SdkState {
@@ -82,7 +81,6 @@ export class SpotifySdkProvider implements MusicProvider {
   private activated = false;
   private transferred = false;
   private initPromise: Promise<void> | null = null;
-  private preloaded: { uri: string; startMs: number } | null = null;
 
   state() {
     return this.st;
@@ -205,25 +203,6 @@ export class SpotifySdkProvider implements MusicProvider {
     }
   }
 
-  async preload(uri: string, startMs: number) {
-    if (!this.activated || !(await this.waitForDevice(1000)) || !this.player) return;
-    try {
-      await this.player.setVolume(0);
-      await this.startOnDevice(uri, startMs);
-      if (await this.waitUntilPlaying(uri, 6000)) {
-        await this.player.pause();
-        await this.player.seek(startMs);
-        this.preloaded = { uri, startMs };
-      } else {
-        this.preloaded = null;
-      }
-    } catch {
-      this.preloaded = null;
-    } finally {
-      await this.player.setVolume(VOLUME).catch(() => undefined);
-    }
-  }
-
   async play(uri: string, startMs: number): Promise<PlayResult> {
     if (!this.activated) {
       return { ok: false, error: 'The TV sound is locked by the browser. Click anywhere on the TV page, then Retry.' };
@@ -233,13 +212,6 @@ export class SpotifySdkProvider implements MusicProvider {
     }
     try {
       await this.player.setVolume(VOLUME).catch(() => undefined);
-      // Fast path: clip was buffered during the intro/reveal.
-      if (this.preloaded?.uri === uri) {
-        this.preloaded = null;
-        await this.player.resume();
-        if (await this.waitUntilPlaying(uri, 2500)) return { ok: true };
-      }
-      this.preloaded = null;
       await this.startOnDevice(uri, startMs);
       if (await this.waitUntilPlaying(uri, 9000)) return { ok: true };
       return { ok: false, error: 'Spotify accepted the song but it never started playing.' };
@@ -259,7 +231,6 @@ export class SpotifySdkProvider implements MusicProvider {
     await this.player?.resume().catch(() => undefined);
   }
   async stop() {
-    this.preloaded = null;
     await this.pause();
   }
 }

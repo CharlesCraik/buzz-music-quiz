@@ -179,7 +179,7 @@ declare
   k text := p_payload->>'kind';
 begin
   if auth.uid() is null then raise exception 'not signed in'; end if;
-  if k not in ('ready', 'answer', 'buzz', 'target', 'tick', 'leave') then raise exception 'BAD_ACTION'; end if;
+  if k not in ('ready', 'answer', 'buzz', 'target', 'tick', 'tap', 'leave') then raise exception 'BAD_ACTION'; end if;
   if pg_column_size(p_payload) > 2000 then raise exception 'BAD_ACTION'; end if;
 
   select rm.id into r_id from rooms rm

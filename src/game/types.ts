@@ -9,6 +9,9 @@ export const ROUND_TYPES = [
   'decadeDash',
   'stealPoints',
   'passTheBomb',
+  'musicalChairs',
+  'beatMash',
+  'lastStanding',
   'musicBingo',
 ] as const;
 export type RoundType = (typeof ROUND_TYPES)[number];
@@ -128,7 +131,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bingoClips: 10,
   bingoClipMs: 15_000,
   questionsPerRound: 5,
-  autoAdvance: true,
+  autoAdvance: false,
   timerMultiplier: 1,
   reducedMotion: false,
   highContrast: false,
@@ -144,6 +147,8 @@ export type PlayerAction =
   | { kind: 'buzz'; qid: string }
   | { kind: 'target'; qid: string; targetId: string }
   | { kind: 'tick'; qid: string; cell: number }
+  /** Mini-game tap (Musical Chairs sit, Beat Mash running total in `count`). */
+  | { kind: 'tap'; qid: string; count?: number }
   | { kind: 'leave' };
 
 export interface ActionEnvelope {
@@ -201,8 +206,6 @@ export type SfxName =
 export type Effect =
   /** Start a clip. The host must answer with an `audio` event carrying the same key. */
   | { type: 'play'; key: string; uri: string; startMs: number; durationMs: number }
-  /** Load a clip silently so the next `play` of the same uri starts instantly. */
-  | { type: 'preload'; uri: string; startMs: number }
   | { type: 'pauseAudio' }
   | { type: 'resumeAudio' }
   | { type: 'stopAudio' }

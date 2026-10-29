@@ -134,8 +134,13 @@ export function buildPrompt(r: GenerateRequest): { system: string; user: string 
     .filter(Boolean)
     .join('\n');
 
-  const diff = r.difficulty === 'mixed' ? 'a mix of easy (about half), medium and a few hard' : r.difficulty;
-  const lines = [`Write ${r.count} multiple-choice music questions, difficulty: ${diff}.`];
+  const ds = [...new Set(r.difficulties)];
+  const diff =
+    ds.length === 1
+      ? `all ${ds[0]}`
+      : `an even mix of ${ds.join(', ')} (label each question's difficulty accurately)`;
+  const lines = [`Write ${r.count} multiple-choice music questions. Difficulty: ${diff}.`];
+  if (r.batchNote) lines.push(r.batchNote);
 
   if (r.mode === 'playlist' && r.tracks?.length) {
     lines.push(
@@ -152,7 +157,7 @@ export function buildPrompt(r: GenerateRequest): { system: string; user: string 
     if (r.categories.length) lines.push(`Categories/genres: ${r.categories.join(', ')}.`);
     if (r.decades.length) lines.push(`Decades: ${r.decades.join(', ')}.`);
     lines.push(
-      `Also return ${r.songCount} songs for "Name That Tune" and "Music Bingo" rounds: very well-known, instantly recognisable hits matching the categories/decades, each by a different artist where possible, with exact official titles and primary artist names as they appear on Spotify.`,
+      `Also return ${r.songCount} songs for the music rounds (Name That Tune, Bingo, Musical Chairs…): well-known, recognisable hits spread across ALL the listed categories and decades, each by a different artist where possible, with exact official titles and primary artist names as they appear on Spotify. Easier difficulty = bigger hits.`,
     );
   }
   if (r.avoidPrompts?.length) {
@@ -168,7 +173,7 @@ export async function requestPack(req: GenerateRequest): Promise<{ questions: un
   const { system, user } = buildPrompt(req);
 
   const ctrl = new AbortController();
-  const timer = window.setTimeout(() => ctrl.abort(), 120_000);
+  const timer = window.setTimeout(() => ctrl.abort(), 240_000);
   let res: Response;
   try {
     res = await fetch('https://api.openai.com/v1/responses', {

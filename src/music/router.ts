@@ -11,7 +11,7 @@ export type PlayOutcome = { status: 'started' } | { status: 'manual' } | { statu
  * Routes each clip to the right provider: built-in mock tracks to the tone
  * synth, Spotify URIs to the Web Playback SDK (or manual companion mode).
  *
- * All commands run through one queue so stop/preload/play can never race
+ * All commands run through one queue so stop/play/pause can never race
  * each other (e.g. a late "stop" cutting off the next clip).
  */
 export class MusicRouter {
@@ -53,17 +53,6 @@ export class MusicRouter {
       if (res.error === 'MANUAL') return { status: 'manual' };
       return { status: 'failed', error: res.error };
     }, { status: 'failed', error: 'Playback error' });
-  }
-
-  preload(uri: string, startMs: number) {
-    return this.enqueue(async () => {
-      const p = this.pick(uri);
-      if (p.preload) {
-        if (this.active && this.active !== p) await this.active.stop();
-        this.active = p;
-        await p.preload(uri, startMs);
-      }
-    }, undefined);
   }
 
   pause() {

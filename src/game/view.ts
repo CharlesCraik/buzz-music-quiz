@@ -53,6 +53,26 @@ export interface PublicQuestion {
     passes: number;
     targets: string[];
   };
+  chairs?: {
+    stage: 'loading' | 'dancing' | 'sit' | 'result';
+    lap: number;
+    alive: string[];
+    seated: string[];
+    out: { playerId: string; lap: number; reason: 'early' | 'slow' }[];
+    lastOut: string[];
+    chairs: number;
+  };
+  mash?: { stage: 'loading' | 'mashing' | 'done'; counts: Record<string, number> };
+  survival?: {
+    stage: 'answering' | 'result';
+    subNumber: number;
+    lives: Record<string, number>;
+    lastResult: Record<string, boolean> | null;
+    lastNote: string | null;
+    amnesty: boolean;
+    /** Only sent once the question is resolved. */
+    correctOptionId: string | null;
+  };
   bingo?: {
     cards: Record<string, BingoCell[]>;
     marks: Record<string, number[]>;
@@ -70,7 +90,7 @@ export interface PublicState {
   phase: Phase;
   paused: boolean;
   hostNow: number;
-  settings: Pick<Settings, 'reducedMotion' | 'highContrast'>;
+  settings: Pick<Settings, 'reducedMotion' | 'highContrast' | 'autoAdvance'>;
   players: PublicPlayer[];
   hasPack: boolean;
   round: {
@@ -139,6 +159,31 @@ export function toPublic(s: GameState, wallNow: number): PublicState {
         passes: q.passes,
         targets: s.players.filter((p) => p.connected && p.id !== q.holder).map((p) => p.id),
       };
+    } else if (q.kind === 'musicalChairs') {
+      base.chairs = {
+        stage: q.stage,
+        lap: q.lap,
+        alive: q.alive,
+        seated: q.seated,
+        out: q.out,
+        lastOut: q.lastOut,
+        chairs: Math.max(1, q.alive.length - 1),
+      };
+    } else if (q.kind === 'beatMash') {
+      base.mash = { stage: q.stage, counts: q.counts };
+    } else if (q.kind === 'lastStanding') {
+      base.number = q.subNumber;
+      base.total = 0;
+      base.answered = Object.keys(q.answers);
+      base.survival = {
+        stage: q.stage,
+        subNumber: q.subNumber,
+        lives: q.lives,
+        lastResult: q.lastResult,
+        lastNote: q.lastNote,
+        amnesty: q.amnesty,
+        correctOptionId: q.stage === 'result' ? (q.question?.correctOptionId ?? null) : null,
+      };
     } else if (q.kind === 'musicBingo') {
       base.audioPlaying = q.clipEndsAt !== null && !s.paused;
       base.bingo = {
@@ -162,7 +207,11 @@ export function toPublic(s: GameState, wallNow: number): PublicState {
     phase: s.phase,
     paused: s.paused,
     hostNow: wallNow,
-    settings: { reducedMotion: s.settings.reducedMotion, highContrast: s.settings.highContrast },
+    settings: {
+      reducedMotion: s.settings.reducedMotion,
+      highContrast: s.settings.highContrast,
+      autoAdvance: s.settings.autoAdvance,
+    },
     players: s.players.map((p) => ({
       id: p.id,
       name: p.name,

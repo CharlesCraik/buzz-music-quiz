@@ -67,18 +67,42 @@ export function noAudio() {
     audioKey: null,
     audioSince: null,
     audioError: null,
+    audioRequested: false,
     clip: null,
   };
 }
 
-/** Ask the host to play a clip; the question waits in 'loading' until the host confirms. */
-export function requestClip(ctx: Ctx, q: QState, uri: string, startMs: number, durationMs: number) {
+/** How long a question is on screen before its music is requested. */
+export const QUESTION_SHOW_MS = 1500;
+
+/**
+ * Ask the host to play a clip; the question waits in 'loading' until the host confirms.
+ * By default the request is held for QUESTION_SHOW_MS so the question is on screen
+ * before any music is heard (the engine tick sends it).
+ */
+export function requestClip(
+  ctx: Ctx,
+  q: QState,
+  uri: string,
+  startMs: number,
+  durationMs: number,
+  delayMs = QUESTION_SHOW_MS,
+) {
   q.clip = { uri, startMs, durationMs };
   q.audio = 'loading';
-  q.audioSince = ctx.now;
   q.audioError = null;
   q.audioKey = `${q.qid}:${ctx.newId()}`;
-  ctx.fx.push({ type: 'play', key: q.audioKey, uri, startMs, durationMs });
+  q.audioSince = ctx.now + delayMs;
+  q.audioRequested = false;
+  if (delayMs <= 0) sendClip(ctx, q);
+}
+
+/** Emit the play effect for a pending clip. */
+export function sendClip(ctx: Ctx, q: QState) {
+  if (!q.clip || !q.audioKey) return;
+  q.audioRequested = true;
+  q.audioSince = ctx.now;
+  ctx.fx.push({ type: 'play', key: q.audioKey, uri: q.clip.uri, startMs: q.clip.startMs, durationMs: q.clip.durationMs });
 }
 
 export function shuffle<T>(arr: T[], rng: Rng): T[] {

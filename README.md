@@ -20,11 +20,14 @@ A family music quiz party game in the spirit of the classic PS2 buzzer quizzes, 
 | **Decade Dash** | A song plays. Pick the decade it came out (from Spotify's release date). +100 each. |
 | **Point Thief** | Buzz in and answer. Correct = +100, then pick a rival to steal up to 150 from (capped at their score). |
 | **Hot Potato Bomb** | One player holds the bomb and answers questions. Right answer = pass it on. The fuse is secret. Holding it when it blows = −200. |
+| **Musical Chairs** | Mini-game. Dance while the music plays; when it stops, tap **SIT!** There's one chair fewer than players, so the slowest is out, and anyone tapping before the music stops is out too. +50 per song survived, +300 to the winner. |
+| **Beat Mash** | Mini-game. When the music starts, tap as fast as you can for 10 seconds. Live bar race on the TV. Most taps: 200 / 150 / 100 / 50. |
+| **Last One Standing** | Mini-game. Everyone has 2 lives. Wrong or no answer loses a life (unless nobody gets it right). Last player standing wins 300. |
 | **Music Bingo** | Everyone gets a 3×3 card of song titles. Clips play one after another; tap a song when you hear it. +50 per tick, −25 for a wrong tap, +50 per line, +200 for the first line, +500 and round over for a full house. |
 
-**Music timing:** in every music round, the countdown, buzzers and answer buttons stay locked ("Get ready… the music is starting") until Spotify confirms the song is actually playing. A slow connection never eats into anyone's time. Each next clip is loaded silently during the reveal so it starts almost instantly. If a song doesn't start within 15 seconds, the host gets **Retry music** / **Play without music** buttons.
+**Music timing:** a song is only requested once its question has been on screen for 1.5 seconds, so music never starts during a reveal or results screen. In every music round, the countdown, buzzers and answer buttons stay locked ("Get ready… the music is starting") until Spotify confirms the song is actually playing. A slow connection never eats into anyone's time. If a song doesn't start within 15 seconds, the host gets **Retry music** / **Play without music** buttons.
 
-The host picks 4, 6 or 8 rounds, which round types, questions per round and timers. There are accessibility options for relaxed timers, reduced motion (no shaking, flashing or confetti) and high contrast. Colours always come with a shape and letter, so colour is never the only cue.
+The host picks 3–12 rounds, which round types, questions per round and timers. There are accessibility options for relaxed timers, reduced motion (no shaking, flashing or confetti) and high contrast. Colours always come with a shape and letter, so colour is never the only cue.
 
 ---
 
@@ -52,7 +55,7 @@ In this **local test mode**, tabs talk to each other through the browser, with n
 Supabase provides the realtime channel between phones and the TV and anonymous player identities. (OpenAI is called straight from the host browser; see section 4.)
 
 1. **Enable anonymous sign-ins.** Dashboard → **Authentication** → **Sign In / Providers** → turn on **Allow anonymous sign-ins** → Save.
-2. **Create the database tables.** Dashboard → **SQL Editor** → **New query** → paste the whole of [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) → **Run**. It is safe to run again.
+2. **Create the database tables.** Dashboard → **SQL Editor** → **New query** → paste the whole of [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) → **Run**. It is safe to run again. If you set up an earlier version, also run [`0002_tap_action.sql`](supabase/migrations/0002_tap_action.sql); the mini-games need it.
 3. **Copy your keys.** Dashboard → **Project Settings** → **API Keys** (or **Data API**): copy the **Project URL** and the **anon / publishable** key.
 4. Create `.env.local` (copy `.env.example`) and set:
 
@@ -142,6 +145,7 @@ The host's browser calls OpenAI directly. No server or Supabase function is invo
 For local development only, you can put `VITE_OPENAI_API_KEY=sk-...` in `.env.local` instead. `pnpm dev` reads it, but production builds strip it. **Never add it to Netlify's environment variables**: anything starting with `VITE_` that the production code reads becomes public in the site's JavaScript.
 
 How generation works:
+- Each AI pack has **64 questions** and, in genre mode, **52 songs**. It's written as two parallel batches (about a minute), across 36 genres and any mix of easy, medium and hard.
 - Questions are generated **before** the game, never during it.
 - Every question is schema-checked: 4 distinct options, a valid correct answer, sensible length, no repeats from recent games, and consistency with Spotify metadata for year questions. Failing questions are discarded automatically.
 - Questions are marked **unverified**. The setup page lists them all so you can delete any you don't trust before you start.
@@ -205,7 +209,7 @@ Each `git push` triggers a single build, which takes about 1 minute of the free 
 | S | Skip the current question; on an intro or reveal, skip the rest of the round |
 | H | Show / hide host controls |
 
-Intros, reveals and results move on automatically after a few seconds. Press Space to go faster.
+By default the game waits for the host after each reveal: press **Space** / **Next ›** when everyone's ready. Turn on **Auto-advance** in setup if you prefer it to move on by itself.
 
 **Keep the host tab visible.** Browsers slow down hidden tabs, which stalls animations and timers.
 

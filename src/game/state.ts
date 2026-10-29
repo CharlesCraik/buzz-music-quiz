@@ -57,6 +57,8 @@ interface QBase {
   audioKey: string | null;
   audioSince: number | null;
   audioError: string | null;
+  /** False until the play effect has actually been sent (clips are sent after a short "question on screen" delay). */
+  audioRequested: boolean;
   clip: { uri: string; startMs: number; durationMs: number } | null;
   /** Unique id for this live question instance (phones echo it back). */
   qid: string;
@@ -124,7 +126,51 @@ export interface BingoQState extends QBase {
   linesAwarded: Record<string, number>;
 }
 
-export type QState = AnswerQState | BuzzQState | BombQState | BingoQState;
+export interface ChairsQState extends QBase {
+  kind: 'musicalChairs';
+  stage: 'loading' | 'dancing' | 'sit' | 'result';
+  pool: Track[];
+  lap: number;
+  alive: string[];
+  seated: string[];
+  out: { playerId: string; lap: number; reason: 'early' | 'slow' }[];
+  lastOut: string[];
+  /** Hidden: when the music stops. */
+  stopAt: number | null;
+  sitDeadline: number | null;
+  resultUntil: number | null;
+}
+
+export interface MashQState extends QBase {
+  kind: 'beatMash';
+  stage: 'loading' | 'mashing' | 'done';
+  counts: Record<string, number>;
+}
+
+export interface SurvivalQState extends QBase {
+  kind: 'lastStanding';
+  stage: 'answering' | 'result';
+  pool: Question[];
+  poolIndex: number;
+  subNumber: number;
+  lives: Record<string, number>;
+  answers: Record<string, { optionId: string; seq: number }>;
+  lastResult: Record<string, boolean> | null;
+  lastNote: string | null;
+  /** True when nobody answered correctly, so no lives were taken. */
+  amnesty: boolean;
+  resultUntil: number | null;
+  winner: string | null;
+}
+
+export type QState =
+  | AnswerQState
+  | BuzzQState
+  | BombQState
+  | BingoQState
+  | ChairsQState
+  | MashQState
+  | SurvivalQState;
 
 export interface RevealResult {
   playerId: string;

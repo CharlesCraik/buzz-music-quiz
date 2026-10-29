@@ -6,6 +6,7 @@ import { Bomb, Equaliser, Explosion, TimerRing } from '../../ui/decor';
 import { useRemaining } from '../../ui/hooks';
 import { COLOUR_HEX } from '../../ui/tokens';
 import { OptionsGrid, playerById } from './common';
+import { ChairsStage, MashStage, SurvivalStage } from './MiniGameStages';
 
 function useHostRemaining(pub: PublicState, deadline: number | null | undefined) {
   // The TV is the host, so no clock offset.
@@ -288,6 +289,12 @@ export function QuestionStage({ pub }: { pub: PublicState }) {
       return <BombStage pub={pub} />;
     case 'musicBingo':
       return <BingoStage pub={pub} />;
+    case 'musicalChairs':
+      return <ChairsStage pub={pub} />;
+    case 'beatMash':
+      return <MashStage pub={pub} />;
+    case 'lastStanding':
+      return <SurvivalStage pub={pub} />;
   }
 }
 
@@ -297,6 +304,7 @@ export function RevealStage({ pub }: { pub: PublicState }) {
   if (!r) return null;
   const isBomb = q?.kind === 'passTheBomb';
   const isBingo = q?.kind === 'musicBingo';
+  const isMini = q?.kind === 'musicalChairs' || q?.kind === 'beatMash' || q?.kind === 'lastStanding';
   const results = r.results
     .map((x) => ({ ...x, p: playerById(pub, x.playerId) }))
     .filter((x) => x.p && (x.delta !== 0 || x.correct !== null));
@@ -314,7 +322,7 @@ export function RevealStage({ pub }: { pub: PublicState }) {
 
       {isBomb && (r.headline.startsWith('BOOM') ? <Explosion size="clamp(140px,22vw,440px)" /> : <Bomb size="clamp(120px,18vw,360px)" shake={false} lit={false} />)}
 
-      {q && !isBomb && !isBingo && (
+      {q && !isBomb && !isBingo && !isMini && (
         <>
           {q.prompt && <p className="tv-text-md text-center font-display text-cream/80">{q.prompt}</p>}
           <div className="w-full">

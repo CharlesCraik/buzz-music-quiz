@@ -8,7 +8,7 @@ import { Avatar } from '../ui/Avatar';
 import { Bomb, Equaliser, Explosion } from '../ui/decor';
 import { useRollingNumber, vibrate } from '../ui/hooks';
 import { ANSWER_STYLES, COLOUR_HEX, COLOUR_SHAPE } from '../ui/tokens';
-import { AnswerPad, BingoCard, Buzzer, Center, TargetPicker, TimeBar } from './parts';
+import { AnswerPad, BingoCard, Buzzer, Center, MashPad, TargetPicker, TimeBar } from './parts';
 
 interface Local {
   qid: string;
@@ -249,6 +249,102 @@ export function Controller({
           <Waiting title={`${nameOf(bomb.holder)} has the bomb!`} sub="Pray they don't pass it to you…">
             <Bomb size="min(45vw, 28dvh)" shake={!pub.settings.reducedMotion} />
           </Waiting>
+        );
+      }
+    } else if (q.kind === 'musicalChairs' && q.chairs) {
+      const c = q.chairs;
+      const alive = c.alive.includes(me.id);
+      const seated = c.seated.includes(me.id);
+      if (!alive) {
+        const why = c.out.find((o) => o.playerId === me.id)?.reason;
+        body = <Waiting title="You're out!" sub={why === 'early' ? 'You sat down before the music stopped!' : 'No chair left for you. Watch the TV!'} />;
+      } else if (c.stage === 'loading') {
+        body = <Waiting title="Get ready to dance…" sub="When the music STOPS, tap SIT. Not before!" />;
+      } else if (c.stage === 'result') {
+        body =
+          c.seated.length === 0 ? (
+            <Waiting title="Nobody sat down!" sub="Same again: listen for the music to stop." />
+          ) : (
+            <Waiting title="Safe!" sub="You're through to the next song." />
+          );
+      } else if (seated) {
+        body = <Waiting title="Safe! You found a chair." sub="Waiting for the others…" />;
+      } else {
+        const sitNow = c.stage === 'sit';
+        body = (
+          <>
+            <p className={`shrink-0 text-center font-display text-2xl font-bold ${sitNow ? 'text-tomato' : ''}`}>
+              {sitNow ? 'The music stopped! SIT!' : 'Dance! Wait for the music to stop…'}
+            </p>
+            <Buzzer
+              colour={sitNow ? colourHex : '#c9c6d6'}
+              label="SIT!"
+              disabled={pub.paused}
+              onBuzz={() => void act({ kind: 'tap', qid: q.qid }, { buzzed: true })}
+            />
+          </>
+        );
+      }
+    } else if (q.kind === 'beatMash' && q.mash) {
+      body =
+        q.mash.stage === 'loading' ? (
+          <Waiting title="Fingers ready…" sub="Start mashing the moment the music plays!" />
+        ) : (
+          <MashPad
+            key={q.qid}
+            active={q.mash.stage === 'mashing' && !pub.paused}
+            colour={colourHex}
+            onTotal={(count) => void send({ kind: 'tap', qid: q.qid, count })}
+          />
+        );
+    } else if (q.kind === 'lastStanding' && q.survival) {
+      const sv = q.survival;
+      const lives = sv.lives[me.id] ?? 0;
+      const hearts = (
+        <p className="shrink-0 text-center font-display text-3xl" aria-label={`${lives} lives`}>
+          {[0, 1].map((i) => (
+            <span key={i} className={i < lives ? 'text-tomato' : 'text-ink/20'}>
+              ♥
+            </span>
+          ))}
+        </p>
+      );
+      if (lives <= 0 && sv.stage === 'answering') {
+        body = <Waiting title="You're out!" sub="Watch the others battle it out on the TV." />;
+      } else if (sv.stage === 'result') {
+        const r = sv.lastResult?.[me.id];
+        body = (
+          <Waiting
+            title={
+              r === undefined
+                ? 'Watch the TV'
+                : r
+                  ? 'Survived!'
+                  : sv.amnesty
+                    ? 'Phew! Saved!'
+                    : lives > 0
+                      ? 'Lost a life!'
+                      : "You're out!"
+            }
+            sub={sv.lastNote ?? undefined}
+          >
+            {hearts}
+          </Waiting>
+        );
+      } else if (loc.answer || q.answered.includes(me.id)) {
+        body = (
+          <Waiting title="Locked in!" sub="Hold your nerve…">
+            {hearts}
+          </Waiting>
+        );
+      } else {
+        body = (
+          <>
+            <TimeBar deadline={q.deadline} total={q.durationMs} offset={offset} paused={pub.paused} />
+            {hearts}
+            {q.prompt && <p className="line-clamp-2 shrink-0 text-center font-display text-lg leading-tight font-semibold">{q.prompt}</p>}
+            <AnswerPad options={q.options} onPick={(id) => void act({ kind: 'answer', qid: q.qid, optionId: id }, { answer: id })} />
+          </>
         );
       }
     } else if (q.kind === 'musicBingo' && q.bingo) {

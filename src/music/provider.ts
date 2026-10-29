@@ -36,8 +36,6 @@ export interface MusicProvider {
   pause(): Promise<void>;
   resume(): Promise<void>;
   stop(): Promise<void>;
-  /** Silently load a clip so a later play() of the same uri starts instantly. */
-  preload?(uri: string, startMs: number): Promise<void>;
   /** Must be called from a user gesture (click/key) to unlock browser autoplay. */
   activate?(): Promise<void>;
 }

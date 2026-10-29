@@ -1,4 +1,4 @@
-import { makeCtx, type Ctx, type Rng } from './ctx';
+import { makeCtx, sendClip, type Ctx, type Rng } from './ctx';
 import { HANDLERS } from './rounds';
 import { sanitiseName, uniqueName } from './names';
 import { ALLOWED_TRANSITIONS, type GameState, type Phase, type ReduceResult } from './state';
@@ -71,15 +71,6 @@ export function roundQuestionCount(s: GameState, roundIndex: number, ctx: Ctx): 
 
 // ---------- audio ----------
 
-/** Ask the host to silently load the clip for question `index` of the current round. */
-function preloadQuestion(ctx: Ctx, roundIndex: number, index: number) {
-  const plan = ctx.s.pack?.rounds[roundIndex];
-  const clip = plan?.questions[index]?.clip;
-  if (clip && index < roundQuestionCount(ctx.s, roundIndex, ctx)) {
-    ctx.fx.push({ type: 'preload', uri: clip.uri, startMs: clip.startMs });
-  }
-}
-
 function audioStarted(ctx: Ctx, playing: boolean) {
   const s = ctx.s;
   const q = s.q;
@@ -104,10 +95,9 @@ function retryAudio(ctx: Ctx) {
   const q = ctx.s.q;
   if (!q?.clip || (q.audio !== 'failed' && q.audio !== 'loading')) return;
   q.audio = 'loading';
-  q.audioSince = ctx.now;
   q.audioError = null;
   q.audioKey = `${q.qid}:${ctx.newId()}`;
-  ctx.fx.push({ type: 'play', key: q.audioKey, uri: q.clip.uri, startMs: q.clip.startMs, durationMs: q.clip.durationMs });
+  sendClip(ctx, q);
 }
 
 // ---------- phase steps ----------
@@ -129,7 +119,6 @@ function enterRound(ctx: Ctx, from: number) {
   s.phaseDeadline = ctx.now + INTRO_MS;
   s.roundSummaries.push({ roundIndex: idx, type: s.pack!.rounds[idx].type, deltas: {} });
   ctx.sfx('roundIntro');
-  preloadQuestion(ctx, idx, 0);
 }
 
 function startQuestion(ctx: Ctx) {
@@ -156,7 +145,6 @@ function finaliseQuestion(ctx: Ctx) {
   s.phaseDeadline = ctx.now + (plan.type === 'musicBingo' ? BINGO_REVEAL_MS : REVEAL_MS);
   ctx.fx.push({ type: 'stopAudio' });
   ctx.sfx('reveal');
-  preloadQuestion(ctx, s.roundIndex, s.questionIndex + 1);
 }
 
 function afterReveal(ctx: Ctx) {
@@ -391,7 +379,11 @@ export function reduce(
       if (s.paused) break;
       if (s.phase === 'QUESTION' && s.q && s.pack) {
         const q = s.q;
-        if (q.audio === 'loading' && q.audioSince !== null && ctx.now - q.audioSince > AUDIO_TIMEOUT_MS) {
+        // Clips are only requested once the question has been on screen for a moment.
+        if (q.audio === 'loading' && !q.audioRequested && q.audioSince !== null && ctx.now >= q.audioSince) {
+          sendClip(ctx, q);
+        }
+        if (q.audio === 'loading' && q.audioRequested && q.audioSince !== null && ctx.now - q.audioSince > AUDIO_TIMEOUT_MS) {
           q.audio = 'failed';
           q.audioError = 'The music is taking too long to start.';
         }

@@ -31,9 +31,11 @@ export const GenerateRequestSchema = z.object({
   mode: z.enum(['playlist', 'category']),
   categories: z.array(z.string().max(40)).max(8),
   decades: z.array(z.string().max(10)).max(8),
-  difficulty: z.enum(['easy', 'medium', 'hard', 'mixed']),
-  count: z.number().int().min(4).max(40),
-  songCount: z.number().int().min(0).max(30),
+  difficulties: z.array(z.enum(['easy', 'medium', 'hard'])).min(1),
+  count: z.number().int().min(4).max(64),
+  songCount: z.number().int().min(0).max(60),
+  /** e.g. "batch 1 of 2" so parallel requests cover different ground. */
+  batchNote: z.string().max(200).optional(),
   familyFriendly: z.boolean(),
   tracks: z
     .array(
