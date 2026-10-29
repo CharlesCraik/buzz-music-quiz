@@ -45,17 +45,6 @@ export function isSpotifyConnected(): boolean {
   return !!load<StoredToken>(TOKEN_KEY);
 }
 
-/** Spotify only allows http redirects on loopback IPs, so localhost must become 127.0.0.1. */
-export function redirectOriginMismatch(): string | null {
-  try {
-    const target = new URL(env.spotifyRedirectUri);
-    if (target.origin !== window.location.origin) return target.origin;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
 export async function startSpotifyLogin(returnTo = '/host'): Promise<void> {
   const verifier = randomString(64);
   save(VERIFIER_KEY, verifier);

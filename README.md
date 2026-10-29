@@ -105,7 +105,6 @@ You can add up to 5 people, but only the host needs to be listed.
 
    ```
    VITE_SPOTIFY_CLIENT_ID=your-client-id
-   VITE_SPOTIFY_REDIRECT_URI=http://127.0.0.1:5173/callback
    VITE_ENABLE_SPOTIFY_WEB_PLAYBACK=true
    ```
 
@@ -176,7 +175,6 @@ Netlify serves the static site. All realtime and AI work runs on Supabase, so th
    | `VITE_SUPABASE_URL` | your Supabase URL |
    | `VITE_SUPABASE_ANON_KEY` | your anon/publishable key |
    | `VITE_SPOTIFY_CLIENT_ID` | your Spotify Client ID |
-   | `VITE_SPOTIFY_REDIRECT_URI` | `https://YOUR-SITE.netlify.app/callback` |
    | `VITE_ENABLE_SPOTIFY_WEB_PLAYBACK` | `true` |
 
 4. Click **Deploy**.
@@ -220,7 +218,7 @@ Intros, reveals and results move on automatically after a few seconds. Press Spa
 |---|---|
 | "Supabase anonymous sign-in failed" | Turn on anonymous sign-ins (section 2, step 1). |
 | Phones say "We couldn't find that room" | Check that `VITE_TRANSPORT=supabase` is set on the host **and** the deployed site. Local test mode only works between tabs of one browser. |
-| Spotify: `INVALID_CLIENT: Invalid redirect URI` | The redirect URI in Spotify must match `VITE_SPOTIFY_REDIRECT_URI` exactly, including `http`/`https`, `127.0.0.1` and `/callback`. |
+| Spotify: `INVALID_CLIENT: Invalid redirect URI` | The app uses `<the site you opened>/callback`. Add that exact URL (e.g. `https://YOUR-SITE.netlify.app/callback` and `http://127.0.0.1:5173/callback`) under Redirect URIs in the Spotify dashboard. |
 | Spotify: "Check your account is added under User Management" | Add your Spotify account under your app's **User Management** (section 3.2). |
 | "Spotify Premium is required" | In-browser playback needs Premium. Switch to **I'll press play in Spotify**. |
 | No sound on the TV | Click **Enable audio**. Check the laptop volume and that the browser tab isn't muted. Safari has limited Web Playback SDK support, so use Chrome, Edge or Firefox. |

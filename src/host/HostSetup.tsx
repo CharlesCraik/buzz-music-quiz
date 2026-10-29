@@ -9,7 +9,6 @@ import { getMe, getMyPlaylists, getPlaylistTracks, type PlaylistSummary } from '
 import {
   disconnectSpotify,
   isSpotifyConnected,
-  redirectOriginMismatch,
   startSpotifyLogin,
 } from '../music/spotifyAuth';
 import { buildPack, feasibleRounds } from '../questions/buildPack';
@@ -120,7 +119,6 @@ export default function HostSetup() {
   const [playlists, setPlaylists] = useState<PlaylistSummary[] | null>(null);
   const [playlistId, setPlaylistId] = useState<string | null>(null);
   const [playlistTracks, setPlaylistTracks] = useState<Track[]>([]);
-  const originMismatch = redirectOriginMismatch();
 
   useEffect(() => {
     if (!spotifyOn) return;
@@ -346,10 +344,6 @@ export default function HostSetup() {
             {!hasSpotify() ? (
               <p className="chunky-sm bg-cream p-3">
                 Spotify isn't configured yet. Add <code>VITE_SPOTIFY_CLIENT_ID</code> (see README). You can still play with the built-in sample tunes.
-              </p>
-            ) : originMismatch ? (
-              <p className="chunky-sm bg-cream p-3">
-                Spotify sign-in only works from <a className="underline" href={originMismatch + '/host'}>{originMismatch}</a>. Open the game there.
               </p>
             ) : spotifyOn ? (
               <div className="chunky-sm flex flex-wrap items-center justify-between gap-3 bg-cream p-3">
