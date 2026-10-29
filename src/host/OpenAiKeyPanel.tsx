@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { DEFAULT_MODEL, getOpenAiKey, getOpenAiModel, setOpenAiKey, setOpenAiModel } from '../questions/openai';
+import {
+  cleanKey,
+  DEFAULT_MODEL,
+  getOpenAiKey,
+  getOpenAiModel,
+  setOpenAiKey,
+  setOpenAiModel,
+  testOpenAiKey,
+} from '../questions/openai';
 
 function mask(key: string) {
   return key.length > 10 ? `${key.slice(0, 6)}…${key.slice(-4)}` : '••••';
@@ -11,6 +19,8 @@ export function OpenAiKeyPanel({ onChange }: { onChange: () => void }) {
   const [editing, setEditing] = useState(!getOpenAiKey());
   const [draft, setDraft] = useState('');
   const [model, setModel] = useState(getOpenAiModel());
+  const [checking, setChecking] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
 
   if (!editing && key) {
     return (
@@ -44,9 +54,22 @@ export function OpenAiKeyPanel({ onChange }: { onChange: () => void }) {
   return (
     <form
       className="chunky-sm flex flex-col gap-2 bg-cream p-3"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        setOpenAiKey(draft);
+        const k = cleanKey(draft);
+        if (!k.startsWith('sk-')) {
+          setProblem('That does not look like an OpenAI key (they start with "sk-").');
+          return;
+        }
+        setChecking(true);
+        setProblem(null);
+        const err = await testOpenAiKey(k);
+        setChecking(false);
+        if (err) {
+          setProblem(`OpenAI says: ${err}`);
+          return;
+        }
+        setOpenAiKey(k);
         setOpenAiModel(model);
         setKey(getOpenAiKey());
         setDraft('');
@@ -56,14 +79,21 @@ export function OpenAiKeyPanel({ onChange }: { onChange: () => void }) {
     >
       <label className="flex flex-col gap-1">
         <span className="label">OpenAI API key</span>
+        {/* Plain text field (masked via CSS) so password managers don't autofill it. */}
         <input
-          className="field text-base"
-          type="password"
+          className="field text-base [-webkit-text-security:disc]"
+          type="text"
+          name="openai-api-key"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="sk-..."
           autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
           spellCheck={false}
+          data-1p-ignore
+          data-lpignore="true"
+          data-bwignore
         />
       </label>
       <label className="flex flex-col gap-1">
@@ -79,9 +109,10 @@ export function OpenAiKeyPanel({ onChange }: { onChange: () => void }) {
       <p className="text-xs text-ink/60">
         Saved only in this browser on this laptop and sent only to api.openai.com. Use a key with a low spending limit.
       </p>
+      {problem && <p className="chunky-sm bg-tomato p-2 text-sm font-semibold text-cream">{problem}</p>}
       <div className="flex gap-2">
-        <button className="btn-primary text-base" disabled={!draft.trim()}>
-          Save key
+        <button className="btn-primary text-base" disabled={!draft.trim() || checking}>
+          {checking ? 'Checking key…' : 'Save key'}
         </button>
         {key && (
           <button type="button" className="btn-ghost text-base" onClick={() => setEditing(false)}>

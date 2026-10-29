@@ -21,9 +21,34 @@ export function getOpenAiKey(): string {
   return '';
 }
 
+/** Strip things people accidentally paste along with the key. */
+export function cleanKey(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^(VITE_)?OPENAI_API_KEY\s*=\s*/i, '')
+    .replace(/^Bearer\s+/i, '')
+    .replace(/^["'`]|["'`]$/g, '')
+    .replace(/\s+/g, '');
+}
+
 export function setOpenAiKey(key: string) {
-  if (key.trim()) save(KEY_STORAGE, key.trim());
+  const k = cleanKey(key);
+  if (k) save(KEY_STORAGE, k);
   else remove(KEY_STORAGE);
+}
+
+/** Quick check that a key works (lists models). Returns null if OK, else a message. */
+export async function testOpenAiKey(key: string): Promise<string | null> {
+  try {
+    const res = await fetch('https://api.openai.com/v1/models', {
+      headers: { Authorization: `Bearer ${cleanKey(key)}` },
+    });
+    if (res.ok) return null;
+    const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    return data.error?.message ?? `OpenAI said ${res.status}`;
+  } catch {
+    return 'OpenAI rejected the key (or you are offline).';
+  }
 }
 
 export function getOpenAiModel(): string {
@@ -174,7 +199,9 @@ export async function requestPack(req: GenerateRequest): Promise<{ questions: un
     output?: { content?: { type: string; text?: string }[] }[];
   };
   if (!res.ok) {
-    if (res.status === 401) throw new Error('OpenAI rejected the API key. Check it and save again.');
+    if (res.status === 401) {
+      throw new Error(`OpenAI rejected the request: ${data.error?.message ?? 'invalid API key'}. Re-save the key on this page.`);
+    }
     if (res.status === 429) throw new Error('OpenAI rate limit or quota hit. Wait a minute or check your billing.');
     throw new Error(data.error?.message ?? `OpenAI error ${res.status}`);
   }

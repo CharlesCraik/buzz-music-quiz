@@ -87,3 +87,12 @@ describe('buildPack', () => {
     });
   });
 });
+
+describe('cleanKey', () => {
+  it('strips pasted prefixes, quotes and whitespace', async () => {
+    const { cleanKey } = await import('./openai');
+    expect(cleanKey(' VITE_OPENAI_API_KEY="sk-proj-abc"\n')).toBe('sk-proj-abc');
+    expect(cleanKey('Bearer sk-abc')).toBe('sk-abc');
+    expect(cleanKey("'sk-a b\tc'")).toBe('sk-abc');
+  });
+});
