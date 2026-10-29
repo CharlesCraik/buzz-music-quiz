@@ -1,4 +1,4 @@
-import { Emitter, type MusicProvider, type ProviderState } from './provider';
+import { Emitter, type MusicProvider, type PlayResult, type ProviderState } from './provider';
 
 /**
  * Manual companion mode: the host plays songs in their own Spotify app.
@@ -17,8 +17,10 @@ export class ManualProvider implements MusicProvider {
   onState(cb: (s: ProviderState) => void) {
     return this.ev.on(cb);
   }
-  async play(uri: string, startMs: number) {
+  /** Never auto-confirms: the host taps "It's playing" to start the timer. */
+  async play(uri: string, startMs: number): Promise<PlayResult> {
     this.cue.emit({ uri, startMs });
+    return { ok: false, error: 'MANUAL' };
   }
   async pause() {}
   async resume() {}

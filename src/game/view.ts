@@ -3,7 +3,7 @@ import { makeCtx } from './ctx';
 import { ROUND_INFO } from './rounds';
 import { playedIds } from './rounds/musicBingo';
 import { scoreOf, standings, type Standing } from './scoring';
-import type { BingoCell, GameState, Phase, RevealInfo } from './state';
+import type { AudioStatus, BingoCell, GameState, Phase, RevealInfo } from './state';
 import type { AnswerOption, AvatarId, ColourId, RoundType, Settings } from './types';
 
 /**
@@ -35,8 +35,11 @@ export interface PublicQuestion {
   durationMs: number;
   answered: string[];
   audioPlaying: boolean;
+  /** 'loading' = waiting for the music to start; timers have not started yet. */
+  audio: AudioStatus;
+  audioError: string | null;
   buzz?: {
-    stage: 'open' | 'answering' | 'choosing';
+    stage: 'loading' | 'open' | 'answering' | 'choosing';
     activeId: string | null;
     activeDeadline: number | null;
     lockedOut: string[];
@@ -84,6 +87,11 @@ export interface PublicState {
   roundDeltas: Record<string, number> | null;
 }
 
+const ANSWER_KINDS = ['multipleChoice', 'fastestFinger', 'introSprint', 'whoSings', 'decadeDash'] as const;
+export function isAnswerKind(k: RoundType): k is (typeof ANSWER_KINDS)[number] {
+  return (ANSWER_KINDS as readonly string[]).includes(k);
+}
+
 export function toPublic(s: GameState, wallNow: number): PublicState {
   const ctx = makeCtx(s, wallNow, Math.random);
   const plan = s.pack?.rounds[s.roundIndex];
@@ -104,9 +112,11 @@ export function toPublic(s: GameState, wallNow: number): PublicState {
       deadline: toWall(s, q.deadline),
       durationMs: q.durationMs,
       answered: [],
-      audioPlaying: false,
+      audioPlaying: q.audio === 'playing' && !s.paused,
+      audio: q.audio,
+      audioError: q.audioError,
     };
-    if (q.kind === 'multipleChoice' || q.kind === 'fastestFinger') {
+    if (isAnswerKind(q.kind) && 'answers' in q) {
       base.answered = Object.keys(q.answers);
     } else if (q.kind === 'nameThatTune' || q.kind === 'stealPoints') {
       base.audioPlaying = q.audioPlaying && !s.paused;

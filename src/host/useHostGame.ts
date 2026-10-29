@@ -45,6 +45,7 @@ export function useHostGame(): HostGame {
   const lastPhase = useRef('');
   const lastSave = useRef(0);
   const sfxRef = useRef(true);
+  const dispatchRef = useRef<((ev: EngineEvent) => void) | null>(null);
   sfxRef.current = sfxOn;
 
   musicRef.current ??= new MusicRouter();
@@ -57,9 +58,22 @@ export function useHostGame(): HostGame {
           case 'sfx':
             if (sfxRef.current) playSfx(e.name);
             break;
-          case 'play':
+          case 'play': {
             setMusicError(null);
-            void music.play(e.uri, e.startMs, e.durationMs);
+            const key = e.key;
+            void music.play(e.uri, e.startMs, e.durationMs).then((res) => {
+              // Tell the engine so it can start the timer only once the music is audible.
+              if (res.status === 'started') dispatchRef.current?.({ type: 'audio', key, status: 'started' });
+              else if (res.status === 'failed') {
+                setMusicError(res.error);
+                dispatchRef.current?.({ type: 'audio', key, status: 'failed', detail: res.error });
+              }
+              // 'manual': host presses "It's playing" which sends the audioStarted command.
+            });
+            break;
+          }
+          case 'preload':
+            void music.preload(e.uri, e.startMs);
             break;
           case 'pauseAudio':
             void music.pause();
@@ -112,13 +126,13 @@ export function useHostGame(): HostGame {
     },
     [publish, runEffects],
   );
+  dispatchRef.current = dispatch;
 
   // Boot: resume a saved session after refresh, or start fresh from the prepared pack.
   useEffect(() => {
     let cancelled = false;
     const transport = createHostTransport();
     transportRef.current = transport;
-    music.onError = (m) => setMusicError(m);
     const unsubCue = music.manual.cue.on(setCue);
     music.mode = loadPrepared()?.musicMode ?? music.mode;
 
@@ -157,6 +171,10 @@ export function useHostGame(): HostGame {
     })();
 
     const tick = window.setInterval(() => dispatch({ type: 'tick' }), TICK_MS);
+    // Browsers only allow sound after a user gesture: any click/key on the TV page unlocks it.
+    const unlock = () => music.unlock();
+    window.addEventListener('pointerdown', unlock, true);
+    window.addEventListener('keydown', unlock, true);
     const heartbeat = window.setInterval(() => {
       if (stateRef.current) publish(stateRef.current, true);
     }, REPUBLISH_MS);
@@ -165,6 +183,8 @@ export function useHostGame(): HostGame {
       cancelled = true;
       clearInterval(tick);
       clearInterval(heartbeat);
+      window.removeEventListener('pointerdown', unlock, true);
+      window.removeEventListener('keydown', unlock, true);
       unsubCue();
       void music.stop();
       void transport.close(false);

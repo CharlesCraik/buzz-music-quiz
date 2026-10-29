@@ -13,10 +13,13 @@ export interface TrackMetadata {
 
 export type ProviderState =
   | { status: 'idle' }
-  | { status: 'connecting' }
+  | { status: 'connecting'; detail?: string }
   | { status: 'ready'; detail?: string }
   | { status: 'needs-gesture'; detail: string }
   | { status: 'error'; detail: string };
+
+/** Result of a play request. `started` means the clip is confirmed audible. */
+export type PlayResult = { ok: true } | { ok: false; error: string };
 
 /**
  * Playback adapter. Game logic only ever talks to this interface, so
@@ -28,11 +31,14 @@ export interface MusicProvider {
   readonly canPlay: boolean;
   state(): ProviderState;
   onState(cb: (s: ProviderState) => void): () => void;
-  play(uri: string, startMs: number, durationMs: number): Promise<void>;
+  /** Resolves once the clip is actually playing (or fails with a reason). */
+  play(uri: string, startMs: number, durationMs: number): Promise<PlayResult>;
   pause(): Promise<void>;
   resume(): Promise<void>;
   stop(): Promise<void>;
-  /** Must be called from a user gesture (click) to unlock browser autoplay. */
+  /** Silently load a clip so a later play() of the same uri starts instantly. */
+  preload?(uri: string, startMs: number): Promise<void>;
+  /** Must be called from a user gesture (click/key) to unlock browser autoplay. */
   activate?(): Promise<void>;
 }
 
@@ -48,3 +54,5 @@ export class Emitter<T> {
     this.subs.forEach((cb) => cb(v));
   }
 }
+
+export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

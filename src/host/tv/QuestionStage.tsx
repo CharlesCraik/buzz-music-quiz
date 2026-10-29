@@ -95,7 +95,9 @@ function BuzzStage({ pub }: { pub: PublicState }) {
       )}
       {!isTune && <Prompt text={q.prompt} />}
       <div className="flex min-h-[clamp(70px,14vh,200px)] items-center justify-center">
-        {b.activeId ? (
+        {b.stage === 'loading' ? (
+          <MusicStarting pub={pub} />
+        ) : b.activeId ? (
           <BuzzBanner pub={pub} />
         ) : (
           <motion.p
@@ -119,12 +121,35 @@ function BuzzStage({ pub }: { pub: PublicState }) {
   );
 }
 
+/** Big "get ready" banner shown while the clip is loading; the clock hasn't started yet. */
+function MusicStarting({ pub }: { pub: PublicState }) {
+  const q = pub.question!;
+  if (q.audio !== 'loading' && q.audio !== 'failed') return null;
+  return (
+    <motion.div
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      className="chunky mx-auto flex items-center gap-[1.5vw] bg-sunflower px-[2vw] py-[1vh]"
+    >
+      <Equaliser className="h-[clamp(36px,6vh,100px)] w-[clamp(60px,8vw,160px)]" playing={false} />
+      <p className="tv-text-lg font-display font-bold">
+        {q.audio === 'failed' ? 'Waiting for the music…' : 'Get ready… the music is starting'}
+      </p>
+    </motion.div>
+  );
+}
+
 function AnswerStage({ pub }: { pub: PublicState }) {
   const q = pub.question!;
+  const musical = q.audio !== 'none' || q.kind === 'introSprint' || q.kind === 'whoSings' || q.kind === 'decadeDash';
   return (
     <div className="flex h-full flex-col gap-[3vh]">
       <Header pub={pub} timer={{ deadline: q.deadline, total: q.durationMs }} />
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex flex-1 flex-col items-center justify-center gap-[2vh]">
+        {musical && q.audio === 'playing' && (
+          <Equaliser className="h-[clamp(48px,10vh,180px)] w-[clamp(120px,20vw,420px)]" playing={q.audioPlaying} bars={9} />
+        )}
+        <MusicStarting pub={pub} />
         <Prompt text={q.prompt} />
       </div>
       <OptionsGrid options={q.options} />
@@ -197,7 +222,13 @@ function BingoStage({ pub }: { pub: PublicState }) {
               {bg.clipNumber === 0 ? 'Get ready…' : `Song ${bg.clipNumber} of ${bg.totalClips}`}
             </p>
             <p className="tv-text-md font-display text-cream/70">
-              {bg.playing ? 'Is it on your card? Tap it!' : bg.clipNumber > 0 ? 'Next song coming up…' : 'Check your card!'}
+              {q.audio === 'loading' || q.audio === 'failed'
+                ? 'Get ready… the next song is starting'
+                : bg.playing
+                  ? 'Is it on your card? Tap it!'
+                  : bg.clipNumber > 0
+                    ? 'Next song coming up…'
+                    : 'Check your card!'}
             </p>
           </div>
         </div>
@@ -246,6 +277,9 @@ export function QuestionStage({ pub }: { pub: PublicState }) {
   switch (q.kind) {
     case 'multipleChoice':
     case 'fastestFinger':
+    case 'introSprint':
+    case 'whoSings':
+    case 'decadeDash':
       return <AnswerStage pub={pub} />;
     case 'nameThatTune':
     case 'stealPoints':

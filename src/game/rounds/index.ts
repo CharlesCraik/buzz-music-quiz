@@ -1,6 +1,6 @@
 import type { RoundHandler } from '../ctx';
 import type { RoundType } from '../types';
-import { fastestFinger, multipleChoice } from './answerRounds';
+import { decadeDash, fastestFinger, introSprint, multipleChoice, whoSings } from './answerRounds';
 import { nameThatTune, stealPoints } from './buzzRounds';
 import { musicBingo } from './musicBingo';
 import { passTheBomb } from './passTheBomb';
@@ -9,6 +9,9 @@ export const HANDLERS: Record<RoundType, RoundHandler> = {
   multipleChoice: multipleChoice as RoundHandler,
   fastestFinger: fastestFinger as RoundHandler,
   nameThatTune: nameThatTune as RoundHandler,
+  introSprint: introSprint as RoundHandler,
+  whoSings: whoSings as RoundHandler,
+  decadeDash: decadeDash as RoundHandler,
   stealPoints: stealPoints as RoundHandler,
   passTheBomb: passTheBomb as RoundHandler,
   musicBingo: musicBingo as RoundHandler,
@@ -43,6 +46,28 @@ export const ROUND_INFO: Record<RoundType, RoundInfo> = {
     tagline: 'Hit the buzzer when you know it!',
     rules:
       'A song plays. First to buzz gets to answer. Earlier buzzes score more; wrong answers lose points and lock you out.',
+    needs: 'tracks',
+    audio: true,
+  },
+  introSprint: {
+    title: 'Intro Sprint',
+    tagline: 'Name the song from its very first notes.',
+    rules:
+      'Songs play from the start. Everyone picks the title on their phone. Fastest correct answers score most: 300, 200, 150, 100.',
+    needs: 'tracks',
+    audio: true,
+  },
+  whoSings: {
+    title: 'Who Sings It?',
+    tagline: 'Listen, then name the artist.',
+    rules: 'A song plays. Everyone picks the artist on their phone. +100 for every correct answer.',
+    needs: 'tracks',
+    audio: true,
+  },
+  decadeDash: {
+    title: 'Decade Dash',
+    tagline: 'When was this a hit?',
+    rules: 'A song plays. Pick the decade it was released in. +100 for every correct answer.',
     needs: 'tracks',
     audio: true,
   },

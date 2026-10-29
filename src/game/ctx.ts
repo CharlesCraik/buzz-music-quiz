@@ -56,6 +56,29 @@ export interface RoundHandler<Q extends QState = QState> {
   reveal(ctx: Ctx, q: Q): RevealInfo;
   /** Called when a player joins mid-question (e.g. deal a bingo card). */
   onLateJoin?(ctx: Ctx, q: Q, playerId: string): void;
+  /** The clip requested by this question is now audible (or the host skipped the music): start timers. */
+  onAudioStarted?(ctx: Ctx, q: Q): void;
+}
+
+/** Audio fields for a question with no music. */
+export function noAudio() {
+  return {
+    audio: 'none' as const,
+    audioKey: null,
+    audioSince: null,
+    audioError: null,
+    clip: null,
+  };
+}
+
+/** Ask the host to play a clip; the question waits in 'loading' until the host confirms. */
+export function requestClip(ctx: Ctx, q: QState, uri: string, startMs: number, durationMs: number) {
+  q.clip = { uri, startMs, durationMs };
+  q.audio = 'loading';
+  q.audioSince = ctx.now;
+  q.audioError = null;
+  q.audioKey = `${q.qid}:${ctx.newId()}`;
+  ctx.fx.push({ type: 'play', key: q.audioKey, uri, startMs, durationMs });
 }
 
 export function shuffle<T>(arr: T[], rng: Rng): T[] {

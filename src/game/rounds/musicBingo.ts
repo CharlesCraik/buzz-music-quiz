@@ -1,4 +1,4 @@
-import { baseResults, shuffle, type Ctx, type RoundHandler } from '../ctx';
+import { baseResults, noAudio, requestClip, shuffle, type Ctx, type RoundHandler } from '../ctx';
 import { cappedPenalty } from '../scoring';
 import type { BingoCell, BingoQState } from '../state';
 import type { Track } from '../types';
@@ -31,8 +31,20 @@ function dealCard(ctx: Ctx, pool: Track[]): BingoCell[] {
   return shuffle(pool, ctx.rng).slice(0, CARD_SIZE).map(toCell);
 }
 
+/** Songs that have actually been heard (a clip still loading doesn't count yet). */
 export function playedIds(q: BingoQState): string[] {
-  return q.playOrder.slice(0, q.clipIndex + 1);
+  const waiting = q.audio === 'loading' || q.audio === 'failed';
+  return q.playOrder.slice(0, q.clipIndex + (waiting ? 0 : 1));
+}
+
+export function bingoStartMs(track: Track, clipMs: number): number {
+  const len = track.durationMs ?? 180_000;
+  return Math.max(0, Math.min(len - clipMs - 5000, Math.round(len * 0.3)));
+}
+
+function preloadClip(ctx: Ctx, q: BingoQState, index: number) {
+  const track = q.pool.find((t) => t.id === q.playOrder[index]);
+  if (track) ctx.fx.push({ type: 'preload', uri: track.uri, startMs: bingoStartMs(track, q.durationMs) });
 }
 
 export const musicBingo: RoundHandler<BingoQState> = {
@@ -51,7 +63,7 @@ export const musicBingo: RoundHandler<BingoQState> = {
       misses[p.id] = [];
     }
     const clips = Math.min(Math.max(1, ctx.s.settings.bingoClips), pool.length);
-    return {
+    const q: BingoQState = {
       kind: 'musicBingo',
       qid: ctx.newId(),
       question: null,
@@ -74,7 +86,15 @@ export const musicBingo: RoundHandler<BingoQState> = {
       lineWinner: null,
       fullWinner: null,
       linesAwarded: {},
+      ...noAudio(),
     };
+    preloadClip(ctx, q, 0);
+    return q;
+  },
+
+  onAudioStarted(ctx, q) {
+    q.clipEndsAt = ctx.now + q.durationMs;
+    q.deadline = q.clipEndsAt;
   },
 
   onLateJoin(ctx, q, playerId) {
@@ -130,8 +150,10 @@ export const musicBingo: RoundHandler<BingoQState> = {
     if (q.clipEndsAt !== null && ctx.now >= q.clipEndsAt) {
       q.clipEndsAt = null;
       q.deadline = null;
+      q.audio = 'none';
       q.gapUntil = ctx.now + BETWEEN_CLIPS_MS;
       ctx.fx.push({ type: 'stopAudio' });
+      if (q.clipIndex + 1 < q.playOrder.length) preloadClip(ctx, q, q.clipIndex + 1);
       return;
     }
     if (q.gapUntil !== null && ctx.now >= q.gapUntil) {
@@ -144,12 +166,11 @@ export const musicBingo: RoundHandler<BingoQState> = {
       }
       const track = q.pool.find((t) => t.id === q.playOrder[q.clipIndex]);
       if (track) {
-        const len = track.durationMs ?? 180_000;
-        const startMs = Math.max(0, Math.min(len - q.durationMs - 5000, Math.round(len * 0.3)));
-        ctx.fx.push({ type: 'play', uri: track.uri, startMs, durationMs: q.durationMs });
+        // Clip timer starts in onAudioStarted, once the song is actually audible.
+        requestClip(ctx, q, track.uri, bingoStartMs(track, q.durationMs), q.durationMs + 5000);
+      } else {
+        this.onAudioStarted!(ctx, q);
       }
-      q.clipEndsAt = ctx.now + q.durationMs;
-      q.deadline = q.clipEndsAt;
     }
   },
 

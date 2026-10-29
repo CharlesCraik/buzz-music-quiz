@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { PlayerAction } from '../game/types';
-import type { PublicPlayer, PublicState } from '../game/view';
+import { isAnswerKind, type PublicPlayer, type PublicState } from '../game/view';
 import type { ConnectionStatus, SendResult } from '../realtime';
 import { ERROR_TEXT } from '../realtime';
 import { Avatar } from '../ui/Avatar';
@@ -144,9 +144,14 @@ export function Controller({
       </Center>
     );
   } else if (pub.phase === 'QUESTION' && q) {
-    if (q.kind === 'multipleChoice' || q.kind === 'fastestFinger') {
+    const waitingForMusic = q.audio === 'loading' || q.audio === 'failed';
+    if (isAnswerKind(q.kind)) {
       const done = !!loc.answer || q.answered.includes(me.id);
-      body = done ? (
+      body = waitingForMusic ? (
+        <Waiting title="Get ready…" sub="The music is starting. Answers open as soon as it plays!">
+          <Equaliser className="h-16 w-32" playing={false} />
+        </Waiting>
+      ) : done ? (
         <Waiting title="Locked in!" sub="Fingers crossed… watch the TV.">
           {loc.answer && (
             <span
@@ -167,7 +172,13 @@ export function Controller({
     } else if ((q.kind === 'nameThatTune' || q.kind === 'stealPoints') && q.buzz) {
       const b = q.buzz;
       const lockedOut = b.lockedOut.includes(me.id);
-      if (b.stage === 'answering' && b.activeId === me.id) {
+      if (b.stage === 'loading') {
+        body = (
+          <Waiting title="Get ready to buzz…" sub="The buzzer unlocks as soon as the music plays.">
+            <Equaliser className="h-16 w-32" playing={false} />
+          </Waiting>
+        );
+      } else if (b.stage === 'answering' && b.activeId === me.id) {
         body = (
           <>
             <TimeBar deadline={b.activeDeadline} total={8000} offset={offset} paused={pub.paused} />

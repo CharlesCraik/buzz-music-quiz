@@ -24,8 +24,61 @@ function uniqueBy<T>(items: T[], key: (t: T) => string): T[] {
   });
 }
 
+function clipStart(track: Track, fromIntro: boolean): number {
+  if (fromIntro) return 0;
+  const len = track.durationMs ?? 180_000;
+  return Math.round(Math.min(len * 0.3, Math.max(0, len - 40_000)));
+}
+
+export function decadeOf(year: number): number {
+  return Math.floor(year / 10) * 10;
+}
+
+/** "Which decade?" question for a track with a known year. */
+export function decadeQuestion(track: Track, rng: Rng): Question | null {
+  if (!track.year || track.year < 1940) return null;
+  const d = decadeOf(track.year);
+  const thisDecade = decadeOf(new Date().getFullYear());
+  const candidates = [-30, -20, -10, 10, 20, 30]
+    .map((o) => d + o)
+    .filter((x) => x >= 1950 && x <= thisDecade);
+  const wrong = shuffle(candidates, rng)
+    .sort((a, b) => Math.abs(a - d) - Math.abs(b - d))
+    .slice(0, 3);
+  if (wrong.length < 3) return null;
+  const label = (x: number) => (x >= 2000 ? `${x}s` : `${String(x).slice(2)}s`);
+  const options = [d, ...wrong]
+    .sort((a, b) => a - b)
+    .map((x) => ({ id: x === d ? 'a' : `d${x}`, text: label(x) }));
+  const artist = track.artists.join(', ');
+  return {
+    id: `decade-${track.id}`,
+    category: 'Decade Dash',
+    difficulty: 'medium',
+    questionType: 'decade',
+    prompt: 'Which decade is this song from?',
+    options,
+    correctOptionId: 'a',
+    acceptedAnswers: [label(d)],
+    explanation: `"${track.title}" by ${artist} came out in ${track.year} (per Spotify's release date).`,
+    trackTitle: track.title,
+    artist,
+    releaseYear: track.year,
+    spotifyUri: track.uri,
+    sourceNotes: 'Spotify album release date',
+    verificationStatus: 'verified',
+    clip: { uri: track.uri, startMs: clipStart(track, false) },
+  };
+}
+
 /** Build a Name That Tune question from a track, with distractors from the pool. */
-export function tuneQuestion(track: Track, pool: Track[], rng: Rng, askArtist: boolean): Question | null {
+export function tuneQuestion(
+  track: Track,
+  pool: Track[],
+  rng: Rng,
+  askArtist: boolean,
+  fromIntro = false,
+): Question | null {
   const artist = track.artists.join(', ');
   const field = (t: Track) => (askArtist ? t.artists.join(', ') : t.title);
   const correct = field(track);
@@ -44,10 +97,9 @@ export function tuneQuestion(track: Track, pool: Track[], rng: Rng, askArtist: b
     [correct, ...distractors].map((text, i) => ({ id: 'abcd'[i], text })),
     rng,
   );
-  const len = track.durationMs ?? 180_000;
   return {
     id: `tune-${track.id}`,
-    category: 'Name That Tune',
+    category: fromIntro ? 'Intro Sprint' : askArtist ? 'Who Sings It?' : 'Name That Tune',
     difficulty: 'medium',
     questionType: 'nameThatTune',
     prompt: askArtist ? 'Who is performing this song?' : 'Name that tune!',
@@ -61,7 +113,7 @@ export function tuneQuestion(track: Track, pool: Track[], rng: Rng, askArtist: b
     spotifyUri: track.uri,
     sourceNotes: 'Built from track metadata',
     verificationStatus: 'verified',
-    clip: { uri: track.uri, startMs: Math.round(Math.min(len * 0.3, Math.max(0, len - 40_000))) },
+    clip: { uri: track.uri, startMs: clipStart(track, fromIntro) },
   };
 }
 
@@ -87,7 +139,11 @@ export function buildPack(input: PackInput, rng: Rng = Math.random): GamePack {
         const track = trackPool[trackCursor % trackPool.length];
         trackCursor++;
         attempts++;
-        const tq = tuneQuestion(track, trackPool, rng, questions.length % 3 === 2);
+        let tq: Question | null;
+        if (type === 'decadeDash') tq = decadeQuestion(track, rng);
+        else if (type === 'whoSings') tq = tuneQuestion(track, trackPool, rng, true);
+        else if (type === 'introSprint') tq = tuneQuestion(track, trackPool, rng, false, true);
+        else tq = tuneQuestion(track, trackPool, rng, questions.length % 3 === 2);
         if (tq) questions.push(tq);
       }
       return { type, questions, tracks: [] };
@@ -118,6 +174,9 @@ export function feasibleRounds(questions: Question[], tracks: Track[]): Record<R
     stealPoints: questions.length > 0,
     passTheBomb: questions.length > 0,
     nameThatTune: tracks.length >= 4,
+    introSprint: tracks.length >= 4,
+    whoSings: new Set(tracks.map((t) => normaliseAnswer(t.artists.join(', ')))).size >= 4,
+    decadeDash: tracks.some((t) => !!t.year && t.year >= 1950),
     musicBingo: tracks.length >= CARD_SIZE,
   };
 }

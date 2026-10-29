@@ -23,6 +23,16 @@ export function HostControls({
 }) {
   const [open, setOpen] = useState(() => window.innerWidth >= 1024);
   const [peek, setPeek] = useState(false);
+  const [slowAudio, setSlowAudio] = useState(false);
+  const audioKey = game.state?.q?.audioKey ?? null;
+  const audioStatus = game.pub?.question?.audio;
+  useEffect(() => {
+    setSlowAudio(false);
+    setPeek(false);
+    if (audioStatus !== 'loading') return;
+    const t = window.setTimeout(() => setSlowAudio(true), 4000);
+    return () => clearTimeout(t);
+  }, [audioKey, audioStatus]);
   const pub = game.pub;
   const sdkState = useProviderState(game);
   const phase = pub?.phase;
@@ -56,24 +66,24 @@ export function HostControls({
   const inGame = phase !== 'LOBBY' && phase !== 'GAME_RESULTS';
   const canNext = phase === 'ROUND_INTRO' || phase === 'REVEAL' || phase === 'ROUND_RESULTS';
 
+  const q = pub.question;
   const audioNeedsClick =
     needsSpotify && game.music.mode === 'sdk' && sdkState && (sdkState.status === 'needs-gesture' || sdkState.status === 'idle');
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex flex-col items-end gap-2 p-2 sm:p-3">
-      {(audioNeedsClick || (needsSpotify && sdkState?.status === 'error') || game.musicError) && (
+      {(audioNeedsClick || (needsSpotify && sdkState?.status === 'error')) && (
         <div className="chunky-sm pointer-events-auto flex max-w-xl flex-wrap items-center gap-3 bg-sunflower p-3">
           <span className="text-sm font-semibold">
-            {game.musicError ?? sdkState?.status === 'error'
-              ? (game.musicError ?? (sdkState as { detail: string }).detail)
-              : 'Spotify is ready. Browsers need one click before the TV can play music.'}
+            {sdkState?.status === 'error'
+              ? (sdkState as { detail: string }).detail
+              : 'Click anywhere on this page (or press any key) to switch the TV sound on.'}
           </span>
-          {sdkState?.status !== 'error' && (
-            <button className="btn-ghost text-base" onClick={() => void game.music.sdk?.activate()}>
-              Enable audio
+          {sdkState?.status !== 'error' ? (
+            <button className="btn-ghost text-base" onClick={() => game.music.unlock()}>
+              Switch sound on
             </button>
-          )}
-          {sdkState?.status === 'error' && (
+          ) : (
             <button
               className="btn-ghost text-base"
               onClick={() => {
@@ -86,23 +96,47 @@ export function HostControls({
         </div>
       )}
 
-      {game.cue && (
-        <div className="chunky-sm pointer-events-auto flex items-center gap-3 bg-cream p-3">
-          <span className="text-sm font-semibold">Manual mode: start the song in Spotify now.</span>
-          {peek ? (
-            <a
-              className="btn-ghost text-base"
-              href={`https://open.spotify.com/track/${game.cue.uri.split(':').pop()}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open in Spotify
-            </a>
-          ) : (
-            <button className="btn-ghost text-base" onClick={() => setPeek(true)}>
-              Show song (host only!)
-            </button>
-          )}
+      {q && phase === 'QUESTION' && (q.audio === 'failed' || (q.audio === 'loading' && (slowAudio || game.cue))) && (
+        <div className="chunky-sm pointer-events-auto flex max-w-xl flex-col gap-2 bg-cream p-3">
+          <span className="text-sm font-semibold">
+            {game.cue && q.audio === 'loading'
+              ? 'Manual mode: start the song in Spotify, then tap "It\'s playing" to start the clock.'
+              : q.audio === 'failed'
+                ? `Music problem: ${q.audioError ?? game.musicError ?? 'the song did not start.'}`
+                : 'Still waiting for Spotify to start the song…'}
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {game.cue ? (
+              <>
+                {peek ? (
+                  <a
+                    className="btn-ghost text-base"
+                    href={`https://open.spotify.com/track/${game.cue.uri.split(':').pop()}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open in Spotify
+                  </a>
+                ) : (
+                  <button className="btn-ghost text-base" onClick={() => setPeek(true)}>
+                    Show song (host only!)
+                  </button>
+                )}
+                <button className="btn-primary text-base" onClick={() => game.command('audioStarted')}>
+                  It's playing
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn-primary text-base" onClick={() => game.command('retryAudio')}>
+                  Retry music
+                </button>
+                <button className="btn-ghost text-base" onClick={() => game.command('audioStarted')}>
+                  Play without music
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
 

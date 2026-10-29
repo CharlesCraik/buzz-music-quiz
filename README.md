@@ -15,9 +15,14 @@ A family music quiz party game in the spirit of the classic PS2 buzzer quizzes, 
 | **Quick Quiz** | 4 options, everyone answers on their phone, +100 per correct answer (optional speed bonus). |
 | **Fastest Finger** | Everyone answers. Correct answers are ranked by server order: 300 / 200 / 150 / 100. |
 | **Name That Tune** | A song plays. First to buzz answers on their phone. Earlier = more points (300/200/100). Wrong = −50 (never below 0) and locked out, and the music carries on for everyone else. |
+| **Intro Sprint** | A song plays **from its very first note**. Everyone picks the title; fastest correct answers score 300 / 200 / 150 / 100. |
+| **Who Sings It?** | A song plays. Everyone picks the artist. +100 each. |
+| **Decade Dash** | A song plays. Pick the decade it came out (from Spotify's release date). +100 each. |
 | **Point Thief** | Buzz in and answer. Correct = +100, then pick a rival to steal up to 150 from (capped at their score). |
 | **Hot Potato Bomb** | One player holds the bomb and answers questions. Right answer = pass it on. The fuse is secret. Holding it when it blows = −200. |
 | **Music Bingo** | Everyone gets a 3×3 card of song titles. Clips play one after another; tap a song when you hear it. +50 per tick, −25 for a wrong tap, +50 per line, +200 for the first line, +500 and round over for a full house. |
+
+**Music timing:** in every music round, the countdown, buzzers and answer buttons stay locked ("Get ready… the music is starting") until Spotify confirms the song is actually playing. A slow connection never eats into anyone's time. Each next clip is loaded silently during the reveal so it starts almost instantly. If a song doesn't start within 15 seconds, the host gets **Retry music** / **Play without music** buttons.
 
 The host picks 4, 6 or 8 rounds, which round types, questions per round and timers. There are accessibility options for relaxed timers, reduced motion (no shaking, flashing or confetti) and high contrast. Colours always come with a shape and letter, so colour is never the only cue.
 
@@ -187,7 +192,7 @@ Each `git push` triggers a single build, which takes about 1 minute of the free 
 ## 6. Game night
 
 1. On the laptop, open `https://YOUR-SITE.netlify.app/host` and plug it into the TV. Full-screen the browser (macOS: Ctrl+Cmd+F, Windows: F11).
-2. Choose music, questions and rounds, then click **Open the room**. If you're using Spotify, click **Enable audio**.
+2. Choose music, questions and rounds, then click **Open the room**. Browsers only allow sound after you interact, so **click anywhere on the TV page once** (or press any key). After that, music plays automatically for every round.
 3. Players scan the QR code with their phones. Phones can use any network, including mobile data. Each player picks a name, colour and character, then taps **Ready**.
 4. Click **Start the show!**
 
@@ -221,7 +226,7 @@ Intros, reveals and results move on automatically after a few seconds. Press Spa
 | Spotify: `INVALID_CLIENT: Invalid redirect URI` | The app uses `<the site you opened>/callback`. Add that exact URL (e.g. `https://YOUR-SITE.netlify.app/callback` and `http://127.0.0.1:5173/callback`) under Redirect URIs in the Spotify dashboard. |
 | Spotify: "Check your account is added under User Management" | Add your Spotify account under your app's **User Management** (section 3.2). |
 | "Spotify Premium is required" | In-browser playback needs Premium. Switch to **I'll press play in Spotify**. |
-| No sound on the TV | Click **Enable audio**. Check the laptop volume and that the browser tab isn't muted. Safari has limited Web Playback SDK support, so use Chrome, Edge or Firefox. |
+| No sound on the TV | Click anywhere on the TV page (or press a key) to unlock sound, then press **Retry music**. Check the laptop volume and that the browser tab isn't muted. Safari has limited Web Playback SDK support, so use Chrome, Edge or Firefox. |
 | "No playable tracks found" | Pick a playlist you own. Spotify doesn't share the contents of other people's or Spotify-made playlists with new apps. |
 | AI generation errors | "Could not reach OpenAI" or "rejected the API key": the key is wrong or revoked (OpenAI's error replies are blocked in browsers, so a bad key looks like a network error). Re-save it on `/host`. "rate limit or quota": check billing/limits on platform.openai.com. Unknown model: change the model field. You can still play with the sample pack or a saved pack. |
 | Phone keeps sleeping | The app requests a screen wake lock where the browser supports it. Otherwise, raise the phone's auto-lock time. |

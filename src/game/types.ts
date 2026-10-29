@@ -4,6 +4,9 @@ export const ROUND_TYPES = [
   'multipleChoice',
   'fastestFinger',
   'nameThatTune',
+  'introSprint',
+  'whoSings',
+  'decadeDash',
   'stealPoints',
   'passTheBomb',
   'musicBingo',
@@ -48,7 +51,7 @@ export interface Question {
   id: string;
   category: string;
   difficulty: Difficulty;
-  questionType: 'multipleChoice' | 'nameThatTune' | 'artistOrSong';
+  questionType: 'multipleChoice' | 'nameThatTune' | 'artistOrSong' | 'decade';
   prompt: string;
   options: AnswerOption[];
   correctOptionId: string;
@@ -160,11 +163,17 @@ export type HostCommand =
   | 'skip'
   | 'end'
   | 'toLobby'
-  | 'playAgain';
+  | 'playAgain'
+  /** Re-send the current clip after a failure. */
+  | 'retryAudio'
+  /** Start the timer without (or with manually started) music. */
+  | 'audioStarted';
 
 export type EngineEvent =
   | { type: 'action'; env: ActionEnvelope }
   | { type: 'host'; cmd: HostCommand }
+  /** Music provider report for a clip started with a `play` effect (matched by key). */
+  | { type: 'audio'; key: string; status: 'started' | 'failed'; detail?: string }
   | { type: 'kick'; playerId: string }
   | { type: 'tick' }
   | { type: 'presence'; online: string[] }
@@ -190,7 +199,10 @@ export type SfxName =
   | 'fanfare';
 
 export type Effect =
-  | { type: 'play'; uri: string; startMs: number; durationMs: number }
+  /** Start a clip. The host must answer with an `audio` event carrying the same key. */
+  | { type: 'play'; key: string; uri: string; startMs: number; durationMs: number }
+  /** Load a clip silently so the next `play` of the same uri starts instantly. */
+  | { type: 'preload'; uri: string; startMs: number }
   | { type: 'pauseAudio' }
   | { type: 'resumeAudio' }
   | { type: 'stopAudio' }

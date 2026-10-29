@@ -1,4 +1,4 @@
-import { applyStreaks, baseResults, optionText, type Ctx, type RoundHandler } from '../ctx';
+import { applyStreaks, baseResults, noAudio, optionText, requestClip, type Ctx, type RoundHandler } from '../ctx';
 import { cappedPenalty, scoreOf } from '../scoring';
 import type { BuzzQState } from '../state';
 
@@ -64,15 +64,7 @@ function makeHandler(kind: BuzzQState['kind']): RoundHandler<BuzzQState> {
       const question = plan.questions[i];
       const durationMs = isTune ? ctx.t(ctx.s.settings.clipMs) : ctx.t(ctx.s.settings.answerTimeMs);
       const hasClip = isTune && !!question.clip;
-      if (hasClip && question.clip) {
-        ctx.fx.push({
-          type: 'play',
-          uri: question.clip.uri,
-          startMs: question.clip.startMs,
-          durationMs: durationMs + 60_000,
-        });
-      }
-      return {
+      const q: BuzzQState = {
         kind,
         qid: ctx.newId(),
         question,
@@ -90,8 +82,24 @@ function makeHandler(kind: BuzzQState['kind']): RoundHandler<BuzzQState> {
         buzzOrder: [],
         winnerId: null,
         stolen: null,
-        audioPlaying: hasClip,
+        audioPlaying: false,
+        ...noAudio(),
       };
+      if (hasClip && question.clip) {
+        // No buzzing and no timer until the music is actually audible.
+        q.stage = 'loading';
+        q.deadline = null;
+        requestClip(ctx, q, question.clip.uri, question.clip.startMs, durationMs + 60_000);
+      }
+      return q;
+    },
+
+    onAudioStarted(ctx, q) {
+      if (q.stage !== 'loading') return;
+      q.stage = 'open';
+      q.startedAt = ctx.now;
+      q.deadline = ctx.now + q.durationMs;
+      q.audioPlaying = q.audio === 'playing';
     },
 
     action(ctx, q, env) {

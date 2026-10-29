@@ -1,4 +1,4 @@
-import { Emitter, type MusicProvider, type ProviderState } from './provider';
+import { Emitter, type MusicProvider, type PlayResult, type ProviderState } from './provider';
 
 /**
  * Synthetic "songs" for testing and keyless play: each mock track id seeds a
@@ -62,16 +62,20 @@ export class MockToneProvider implements MusicProvider {
     await audioCtx().resume();
   }
 
-  async play(uri: string) {
+  async play(uri: string): Promise<PlayResult> {
     await this.stop();
     const ctx = audioCtx();
     if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined);
+    if (ctx.state !== 'running') {
+      return { ok: false, error: 'The browser blocked sound. Click anywhere on the TV page, then Retry.' };
+    }
     this.master = ctx.createGain();
     this.master.gain.value = 0.18;
     this.master.connect(ctx.destination);
     this.current = melodyFor(uri);
     this.step = 0;
     this.startLoop();
+    return { ok: true };
   }
 
   private startLoop() {

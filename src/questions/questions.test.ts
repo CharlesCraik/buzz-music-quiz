@@ -96,3 +96,27 @@ describe('cleanKey', () => {
     expect(cleanKey("'sk-a b\tc'")).toBe('sk-abc');
   });
 });
+
+describe('music round questions', () => {
+  it('decade questions have the right decade and a clip', async () => {
+    const { decadeQuestion } = await import('./buildPack');
+    const q = decadeQuestion({ id: 'x', uri: 'spotify:track:x', title: 'T', artists: ['A'], year: 1987 }, Math.random)!;
+    expect(q.options.find((o) => o.id === q.correctOptionId)!.text).toBe('80s');
+    expect(new Set(q.options.map((o) => o.text)).size).toBe(4);
+    expect(q.clip?.uri).toBe('spotify:track:x');
+  });
+
+  it('intro sprint clips start at 0', () => {
+    const pack = buildPack({
+      title: 't',
+      source: 'sample',
+      questions: SAMPLE_QUESTIONS,
+      tracks: MOCK_TRACKS,
+      roundTypes: ['introSprint', 'whoSings', 'decadeDash'],
+      questionsPerRound: 3,
+    });
+    expect(pack.rounds[0].questions.every((q) => q.clip?.startMs === 0)).toBe(true);
+    expect(pack.rounds[1].questions.every((q) => q.prompt.includes('performing'))).toBe(true);
+    expect(pack.rounds[2].questions.length).toBeGreaterThan(0);
+  });
+});

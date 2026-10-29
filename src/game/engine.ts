@@ -16,6 +16,8 @@ const REVEAL_MS = 7000;
 const BINGO_REVEAL_MS = 12_000;
 const ROUND_RESULTS_MS = 9000;
 const PROCESSED_KEEP = 500;
+/** If the music hasn't confirmed as playing by now, flag it so the host can retry. */
+export const AUDIO_TIMEOUT_MS = 15_000;
 
 export function createGame(roomCode: string, settings: Partial<Settings> = {}): GameState {
   return {
@@ -67,6 +69,47 @@ export function roundQuestionCount(s: GameState, roundIndex: number, ctx: Ctx): 
   return HANDLERS[plan.type].questionCount(plan, ctx);
 }
 
+// ---------- audio ----------
+
+/** Ask the host to silently load the clip for question `index` of the current round. */
+function preloadQuestion(ctx: Ctx, roundIndex: number, index: number) {
+  const plan = ctx.s.pack?.rounds[roundIndex];
+  const clip = plan?.questions[index]?.clip;
+  if (clip && index < roundQuestionCount(ctx.s, roundIndex, ctx)) {
+    ctx.fx.push({ type: 'preload', uri: clip.uri, startMs: clip.startMs });
+  }
+}
+
+function audioStarted(ctx: Ctx, playing: boolean) {
+  const s = ctx.s;
+  const q = s.q;
+  if (!q || !s.pack || (q.audio !== 'loading' && q.audio !== 'failed')) return;
+  q.audio = playing ? 'playing' : 'none';
+  q.audioError = null;
+  HANDLERS[s.pack.rounds[s.roundIndex].type].onAudioStarted?.(ctx, q);
+}
+
+function audioEvent(ctx: Ctx, key: string, status: 'started' | 'failed', detail?: string) {
+  const q = ctx.s.q;
+  if (!q || q.audioKey !== key || ctx.s.phase !== 'QUESTION') return;
+  if (status === 'started') {
+    if (q.audio === 'loading' || q.audio === 'failed') audioStarted(ctx, true);
+  } else if (q.audio === 'loading') {
+    q.audio = 'failed';
+    q.audioError = detail ?? 'The music did not start.';
+  }
+}
+
+function retryAudio(ctx: Ctx) {
+  const q = ctx.s.q;
+  if (!q?.clip || (q.audio !== 'failed' && q.audio !== 'loading')) return;
+  q.audio = 'loading';
+  q.audioSince = ctx.now;
+  q.audioError = null;
+  q.audioKey = `${q.qid}:${ctx.newId()}`;
+  ctx.fx.push({ type: 'play', key: q.audioKey, uri: q.clip.uri, startMs: q.clip.startMs, durationMs: q.clip.durationMs });
+}
+
 // ---------- phase steps ----------
 
 function enterRound(ctx: Ctx, from: number) {
@@ -86,6 +129,7 @@ function enterRound(ctx: Ctx, from: number) {
   s.phaseDeadline = ctx.now + INTRO_MS;
   s.roundSummaries.push({ roundIndex: idx, type: s.pack!.rounds[idx].type, deltas: {} });
   ctx.sfx('roundIntro');
+  preloadQuestion(ctx, idx, 0);
 }
 
 function startQuestion(ctx: Ctx) {
@@ -112,6 +156,7 @@ function finaliseQuestion(ctx: Ctx) {
   s.phaseDeadline = ctx.now + (plan.type === 'musicBingo' ? BINGO_REVEAL_MS : REVEAL_MS);
   ctx.fx.push({ type: 'stopAudio' });
   ctx.sfx('reveal');
+  preloadQuestion(ctx, s.roundIndex, s.questionIndex + 1);
 }
 
 function afterReveal(ctx: Ctx) {
@@ -195,6 +240,15 @@ function hostCommand(ctx: Ctx, cmd: HostCommand, wallNow: number) {
     for (const p of s.players) p.ready = false;
     return;
   }
+  if (cmd === 'retryAudio') {
+    retryAudio(ctx);
+    return;
+  }
+  if (cmd === 'audioStarted') {
+    // Manual mode ("it's playing now") or "play without music".
+    audioStarted(ctx, s.q?.audio === 'loading' || s.q?.audio === 'failed' ? !!s.q?.clip : false);
+    return;
+  }
   if (s.paused) return;
 
   if (cmd === 'start') {
@@ -225,7 +279,7 @@ function audioShouldBePlaying(s: GameState): boolean {
   if (!q || q.done) return false;
   if (q.kind === 'nameThatTune') return q.audioPlaying;
   if (q.kind === 'musicBingo') return q.clipEndsAt !== null;
-  return false;
+  return q.audio === 'playing';
 }
 
 function playerAction(ctx: Ctx, env: ActionEnvelope) {
@@ -330,10 +384,18 @@ export function reduce(
     case 'host':
       hostCommand(ctx, event.cmd, wallNow);
       break;
+    case 'audio':
+      audioEvent(ctx, event.key, event.status, event.detail);
+      break;
     case 'tick':
       if (s.paused) break;
       if (s.phase === 'QUESTION' && s.q && s.pack) {
-        HANDLERS[s.pack.rounds[s.roundIndex].type].tick(ctx, s.q);
+        const q = s.q;
+        if (q.audio === 'loading' && q.audioSince !== null && ctx.now - q.audioSince > AUDIO_TIMEOUT_MS) {
+          q.audio = 'failed';
+          q.audioError = 'The music is taking too long to start.';
+        }
+        HANDLERS[s.pack.rounds[s.roundIndex].type].tick(ctx, q);
       } else if (
         s.settings.autoAdvance &&
         s.phaseDeadline !== null &&

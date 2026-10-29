@@ -46,7 +46,18 @@ export interface ScoreEvent {
 
 // ---------- Per-question state, one shape per round family ----------
 
+export type AudioStatus = 'none' | 'loading' | 'playing' | 'failed';
+
 interface QBase {
+  /**
+   * Audio gate: timers for audio questions only start once the host reports
+   * the clip is actually playing ('loading' -> 'playing').
+   */
+  audio: AudioStatus;
+  audioKey: string | null;
+  audioSince: number | null;
+  audioError: string | null;
+  clip: { uri: string; startMs: number; durationMs: number } | null;
   /** Unique id for this live question instance (phones echo it back). */
   qid: string;
   question: Question | null;
@@ -60,13 +71,13 @@ interface QBase {
 }
 
 export interface AnswerQState extends QBase {
-  kind: 'multipleChoice' | 'fastestFinger';
+  kind: 'multipleChoice' | 'fastestFinger' | 'introSprint' | 'whoSings' | 'decadeDash';
   answers: Record<string, { optionId: string; seq: number; at: number }>;
 }
 
 export interface BuzzQState extends QBase {
   kind: 'nameThatTune' | 'stealPoints';
-  stage: 'open' | 'answering' | 'choosing';
+  stage: 'loading' | 'open' | 'answering' | 'choosing';
   activeId: string | null;
   activeDeadline: number | null;
   /** Main deadline remaining while frozen during an answer. */

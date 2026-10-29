@@ -1,15 +1,18 @@
 import { env } from '../lib/env';
 import { ManualProvider } from './manual';
-import { MockToneProvider } from './mockTones';
+import { audioCtx, MockToneProvider } from './mockTones';
 import type { MusicProvider } from './provider';
 import { SpotifySdkProvider } from './spotifySdk';
 
 export type SpotifyMode = 'sdk' | 'manual';
+export type PlayOutcome = { status: 'started' } | { status: 'manual' } | { status: 'failed'; error: string };
 
 /**
  * Routes each clip to the right provider: built-in mock tracks to the tone
- * synth, Spotify URIs to the Web Playback SDK (or manual mode as fallback).
- * Playback failures never throw into the game loop.
+ * synth, Spotify URIs to the Web Playback SDK (or manual companion mode).
+ *
+ * All commands run through one queue so stop/preload/play can never race
+ * each other (e.g. a late "stop" cutting off the next clip).
  */
 export class MusicRouter {
   readonly mock = new MockToneProvider();
@@ -17,38 +20,59 @@ export class MusicRouter {
   readonly sdk: SpotifySdkProvider | null = env.spotifyWebPlayback ? new SpotifySdkProvider() : null;
   mode: SpotifyMode = env.spotifyWebPlayback ? 'sdk' : 'manual';
   private active: MusicProvider | null = null;
-  onError: (msg: string) => void = () => {};
+  private queue: Promise<unknown> = Promise.resolve();
 
   private pick(uri: string): MusicProvider {
     if (uri.startsWith('mock:')) return this.mock;
-    if (this.mode === 'sdk' && this.sdk && this.sdk.state().status === 'ready') return this.sdk;
+    if (this.mode === 'sdk' && this.sdk) return this.sdk;
     return this.manual;
   }
 
-  private async safe(fn: () => Promise<void>) {
-    try {
-      await fn();
-    } catch (e) {
-      this.onError(e instanceof Error ? e.message : String(e));
-    }
+  private enqueue<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+    const run = this.queue.then(fn).catch(() => fallback);
+    this.queue = run;
+    return run;
   }
 
-  play(uri: string, startMs: number, durationMs: number) {
-    const p = this.pick(uri);
-    const prev = this.active;
-    this.active = p;
-    return this.safe(async () => {
-      if (prev && prev !== p) await prev.stop();
-      await p.play(uri, startMs, durationMs);
-    });
+  /** Call from any user gesture on the host page: unlocks browser audio for both providers. */
+  unlock() {
+    void audioCtx()
+      .resume()
+      .catch(() => undefined);
+    const st = this.sdk?.state().status;
+    if (this.mode === 'sdk' && this.sdk && st !== 'ready' && st !== 'error') void this.sdk.activate();
   }
+
+  play(uri: string, startMs: number, durationMs: number): Promise<PlayOutcome> {
+    return this.enqueue<PlayOutcome>(async () => {
+      const p = this.pick(uri);
+      if (this.active && this.active !== p) await this.active.stop();
+      this.active = p;
+      const res = await p.play(uri, startMs, durationMs);
+      if (res.ok) return { status: 'started' };
+      if (res.error === 'MANUAL') return { status: 'manual' };
+      return { status: 'failed', error: res.error };
+    }, { status: 'failed', error: 'Playback error' });
+  }
+
+  preload(uri: string, startMs: number) {
+    return this.enqueue(async () => {
+      const p = this.pick(uri);
+      if (p.preload) {
+        if (this.active && this.active !== p) await this.active.stop();
+        this.active = p;
+        await p.preload(uri, startMs);
+      }
+    }, undefined);
+  }
+
   pause() {
-    return this.safe(async () => this.active?.pause());
+    return this.enqueue(async () => this.active?.pause(), undefined);
   }
   resume() {
-    return this.safe(async () => this.active?.resume());
+    return this.enqueue(async () => this.active?.resume(), undefined);
   }
   stop() {
-    return this.safe(async () => this.active?.stop());
+    return this.enqueue(async () => this.active?.stop(), undefined);
   }
 }

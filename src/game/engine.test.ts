@@ -25,6 +25,9 @@ class Harness {
   seq = 0;
   rng = seeded();
   effects: string[] = [];
+  /** Simulate the host confirming every clip as audible straight away. */
+  autoAudio = true;
+  plays: string[] = [];
 
   constructor(rounds: RoundType[], settings: Partial<Settings> = {}, players = ['p1', 'p2', 'p3']) {
     this.s = createGame('ABCD', { autoAdvance: false, ...settings });
@@ -49,6 +52,11 @@ class Harness {
     const r = reduce(this.s, e, this.now, this.rng);
     this.s = r.state;
     this.effects.push(...r.effects.map((f) => (f.type === 'sfx' ? `sfx:${f.name}` : f.type)));
+    for (const f of r.effects) {
+      if (f.type !== 'play') continue;
+      this.plays.push(f.key);
+      if (this.autoAudio) this.ev({ type: 'audio', key: f.key, status: 'started' });
+    }
     return r;
   }
   act(playerId: string, action: PlayerAction, id?: string) {
@@ -480,5 +488,85 @@ describe('answer normalisation', () => {
     expect(normaliseAnswer('Beyoncé')).toBe('beyonce');
     expect(matchesAccepted('beatles!', ['The Beatles'])).toBe(true);
     expect(matchesAccepted('', ['x'])).toBe(false);
+  });
+});
+
+describe('music gating', () => {
+  it('holds the timer and answers until the clip is confirmed playing', () => {
+    const h = new Harness(['introSprint']);
+    h.autoAudio = false;
+    h.startToQuestion();
+    const q = h.s.q!;
+    expect(q.audio).toBe('loading');
+    expect(q.deadline).toBeNull();
+    h.act('p1', { kind: 'answer', qid: h.qid, optionId: h.correct });
+    expect(Object.keys((h.s.q as { answers: object }).answers)).toHaveLength(0);
+    h.advance(10_000); // lag: still no timer running
+    expect(h.s.q!.deadline).toBeNull();
+    h.ev({ type: 'audio', key: h.plays.at(-1)!, status: 'started' });
+    expect(h.s.q!.audio).toBe('playing');
+    expect(h.s.q!.deadline).toBe(h.now - h.s.pausedTotal + 20_000);
+    h.act('p1', { kind: 'answer', qid: h.qid, optionId: h.correct });
+    expect(Object.keys((h.s.q as { answers: object }).answers)).toHaveLength(1);
+  });
+
+  it('keeps the buzzer locked until Name That Tune music plays', () => {
+    const h = new Harness(['nameThatTune']);
+    h.autoAudio = false;
+    h.startToQuestion();
+    expect((h.s.q as BuzzQState).stage).toBe('loading');
+    h.act('p1', { kind: 'buzz', qid: h.qid });
+    expect((h.s.q as BuzzQState).activeId).toBeNull();
+    h.ev({ type: 'audio', key: h.plays.at(-1)!, status: 'started' });
+    expect((h.s.q as BuzzQState).stage).toBe('open');
+    h.act('p1', { kind: 'buzz', qid: h.qid });
+    expect((h.s.q as BuzzQState).activeId).toBe('p1');
+  });
+
+  it('ignores stale audio confirmations', () => {
+    const h = new Harness(['whoSings']);
+    h.autoAudio = false;
+    h.startToQuestion();
+    h.ev({ type: 'audio', key: 'old-key', status: 'started' });
+    expect(h.s.q!.audio).toBe('loading');
+  });
+
+  it('flags failures and timeouts; host can retry or play without music', () => {
+    const h = new Harness(['decadeDash']);
+    h.autoAudio = false;
+    h.startToQuestion();
+    h.ev({ type: 'audio', key: h.plays.at(-1)!, status: 'failed', detail: 'Premium required' });
+    expect(h.s.q!.audio).toBe('failed');
+    expect(h.s.q!.audioError).toBe('Premium required');
+    h.host('retryAudio');
+    expect(h.s.q!.audio).toBe('loading');
+    expect(h.plays).toHaveLength(2);
+    h.advance(15_001);
+    expect(h.s.q!.audio).toBe('failed');
+    h.host('audioStarted');
+    expect(h.s.q!.deadline).not.toBeNull();
+  });
+
+  it('preloads the first clip at the round intro and the next at each reveal', () => {
+    const h = new Harness(['introSprint']);
+    h.host('start');
+    expect(h.effects).toContain('preload');
+    const before = h.effects.filter((e) => e === 'preload').length;
+    h.host('next');
+    for (const p of ['p1', 'p2', 'p3']) h.act(p, { kind: 'answer', qid: h.qid, optionId: h.correct });
+    expect(h.s.phase).toBe('REVEAL');
+    expect(h.effects.filter((e) => e === 'preload').length).toBe(before + 1);
+  });
+
+  it('bingo clip timer waits for the music too', () => {
+    const h = new Harness(['musicBingo']);
+    h.autoAudio = false;
+    h.startToQuestion();
+    h.advance(2001);
+    const q = h.s.q as BingoQState;
+    expect(q.audio).toBe('loading');
+    expect(q.clipEndsAt).toBeNull();
+    h.ev({ type: 'audio', key: h.plays.at(-1)!, status: 'started' });
+    expect((h.s.q as BingoQState).clipEndsAt).not.toBeNull();
   });
 });

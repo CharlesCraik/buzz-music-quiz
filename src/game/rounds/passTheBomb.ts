@@ -1,4 +1,4 @@
-import { baseResults, shuffle, type Ctx, type RoundHandler } from '../ctx';
+import { baseResults, noAudio, shuffle, type Ctx, type RoundHandler } from '../ctx';
 import { cappedPenalty } from '../scoring';
 import type { BombQState } from '../state';
 
@@ -51,6 +51,7 @@ export const passTheBomb: RoundHandler<BombQState> = {
       poolIndex,
       passes: 0,
       exploded: null,
+      ...noAudio(),
     };
   },
 

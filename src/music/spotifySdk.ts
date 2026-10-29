@@ -1,19 +1,34 @@
-import { Emitter, type MusicProvider, type ProviderState } from './provider';
-import { pauseDevice, playOnDevice, transferPlayback } from './spotifyApi';
+import { Emitter, sleep, type MusicProvider, type PlayResult, type ProviderState } from './provider';
+import { pauseDevice, playOnDevice, SpotifyError, transferPlayback } from './spotifyApi';
 import { getSpotifyToken } from './spotifyAuth';
 
 /**
  * Spotify Web Playback SDK provider: the host browser tab becomes a Spotify
- * Connect device ("Buzzer Beat TV"). Requires Spotify Premium and a user click
- * to unlock audio. Used privately; no audio is recorded or extracted.
+ * Connect device ("Buzzer Beat TV"). Requires Spotify Premium and one user
+ * gesture to unlock audio. Used privately; no audio is recorded or extracted.
+ *
+ * Reliability rules:
+ * - play() only resolves ok once the SDK reports the track is actually playing,
+ *   so the game can hold its timers until the music is audible.
+ * - Lost devices are re-transferred and the request retried.
+ * - preload() buffers the next clip muted + paused so it starts instantly.
  */
+
+interface SdkState {
+  paused: boolean;
+  position: number;
+  loading?: boolean;
+  track_window: { current_track: { uri: string; id: string; linked_from?: { uri: string | null } } | null };
+}
 
 interface SpotifyPlayer {
   connect(): Promise<boolean>;
   disconnect(): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
+  seek(ms: number): Promise<void>;
   setVolume(v: number): Promise<void>;
+  getCurrentState(): Promise<SdkState | null>;
   activateElement(): Promise<void>;
   addListener(event: string, cb: (arg: { device_id?: string; message?: string }) => void): void;
 }
@@ -31,6 +46,8 @@ declare global {
   }
 }
 
+const VOLUME = 0.85;
+
 let sdkLoading: Promise<void> | null = null;
 function loadSdk(): Promise<void> {
   if (window.Spotify) return Promise.resolve();
@@ -39,10 +56,19 @@ function loadSdk(): Promise<void> {
     const s = document.createElement('script');
     s.src = 'https://sdk.scdn.co/spotify-player.js';
     s.async = true;
-    s.onerror = () => reject(new Error('Could not load the Spotify player. Check your internet connection.'));
+    s.onerror = () => {
+      sdkLoading = null;
+      reject(new Error('Could not load the Spotify player. Check your internet connection.'));
+    };
     document.body.appendChild(s);
   });
   return sdkLoading;
+}
+
+function sameTrack(st: SdkState | null, uri: string): boolean {
+  const t = st?.track_window.current_track;
+  if (!t) return false;
+  return t.uri === uri || t.linked_from?.uri === uri || uri.endsWith(`:${t.id}`);
 }
 
 export class SpotifySdkProvider implements MusicProvider {
@@ -53,8 +79,10 @@ export class SpotifySdkProvider implements MusicProvider {
   private st: ProviderState = { status: 'idle' };
   private player: SpotifyPlayer | null = null;
   private deviceId: string | null = null;
+  private activated = false;
   private transferred = false;
-  private stopTimer: number | null = null;
+  private initPromise: Promise<void> | null = null;
+  private preloaded: { uri: string; startMs: number } | null = null;
 
   state() {
     return this.st;
@@ -68,82 +96,156 @@ export class SpotifySdkProvider implements MusicProvider {
   }
 
   /** Load the SDK and register the device. Safe to call repeatedly. */
-  async init(): Promise<void> {
-    if (this.player) return;
-    this.set({ status: 'connecting' });
-    try {
-      await getSpotifyToken();
-      await loadSdk();
-    } catch (e) {
+  init(): Promise<void> {
+    this.initPromise ??= this.doInit().catch((e: unknown) => {
+      this.initPromise = null;
       this.set({ status: 'error', detail: e instanceof Error ? e.message : String(e) });
-      return;
-    }
+    });
+    return this.initPromise;
+  }
+
+  private async doInit() {
+    this.set({ status: 'connecting', detail: 'Starting the Spotify player…' });
+    await getSpotifyToken();
+    await loadSdk();
     const player = new window.Spotify!.Player({
       name: 'Buzzer Beat TV',
       getOAuthToken: (cb) => {
         getSpotifyToken()
           .then(cb)
-          .catch(() => this.set({ status: 'error', detail: 'Spotify session expired. Reconnect Spotify.' }));
+          .catch(() => this.set({ status: 'error', detail: 'Spotify session expired. Reconnect Spotify on the setup page.' }));
       },
-      volume: 0.8,
+      volume: VOLUME,
     });
     player.addListener('ready', ({ device_id }) => {
       this.deviceId = device_id ?? null;
       this.transferred = false;
-      this.set({ status: 'needs-gesture', detail: 'Click "Enable audio" to let the TV play music.' });
+      if (this.activated) {
+        void this.transfer().then(() => this.set({ status: 'ready', detail: 'Playing through this browser' }));
+      } else {
+        this.set({ status: 'needs-gesture', detail: 'Click anywhere (or press a key) to switch the TV sound on.' });
+      }
     });
     player.addListener('not_ready', () => {
       this.deviceId = null;
-      this.set({ status: 'connecting', detail: 'Spotify player reconnecting…' } as ProviderState);
+      this.transferred = false;
+      this.set({ status: 'connecting', detail: 'Spotify player reconnecting…' });
     });
     player.addListener('initialization_error', ({ message }) =>
-      this.set({ status: 'error', detail: `This browser can't run the Spotify player: ${message}` }),
+      this.set({ status: 'error', detail: `This browser can't run the Spotify player: ${message}. Use Chrome or Edge.` }),
     );
     player.addListener('authentication_error', () =>
-      this.set({ status: 'error', detail: 'Spotify login expired or scopes missing. Reconnect Spotify.' }),
+      this.set({ status: 'error', detail: 'Spotify login expired or permissions missing. Reconnect Spotify on the setup page.' }),
     );
     player.addListener('account_error', () =>
       this.set({ status: 'error', detail: 'Spotify Premium is required for in-browser playback.' }),
     );
-    player.addListener('playback_error', ({ message }) =>
-      this.set({ status: 'error', detail: `Playback problem: ${message}` }),
-    );
-    player.addListener('autoplay_failed', () =>
-      this.set({ status: 'needs-gesture', detail: 'Browser blocked autoplay. Click "Enable audio".' }),
-    );
+    player.addListener('autoplay_failed', () => {
+      this.activated = false;
+      this.set({ status: 'needs-gesture', detail: 'The browser blocked autoplay. Click anywhere to switch the sound on.' });
+    });
     this.player = player;
-    const ok = await player.connect();
-    if (!ok) this.set({ status: 'error', detail: 'Could not connect the Spotify player.' });
+    if (!(await player.connect())) throw new Error('Could not connect the Spotify player.');
   }
 
+  /** Unlock audio. Call from a click/keypress handler. */
   async activate() {
     if (!this.player) await this.init();
-    if (!this.player || !this.deviceId) return;
+    if (!this.player) return;
     try {
       await this.player.activateElement();
-      await transferPlayback(this.deviceId);
-      this.transferred = true;
-      this.set({ status: 'ready', detail: 'Playing through this browser' });
+      this.activated = true;
+      if (this.deviceId) {
+        await this.transfer();
+        this.set({ status: 'ready', detail: 'Playing through this browser' });
+      }
     } catch (e) {
       this.set({ status: 'error', detail: e instanceof Error ? e.message : String(e) });
     }
   }
 
-  async play(uri: string, startMs: number, durationMs: number) {
-    if (!this.deviceId) throw new Error('Spotify player not ready');
-    if (!this.transferred) {
-      await transferPlayback(this.deviceId);
-      this.transferred = true;
-    }
-    this.clearTimer();
-    await playOnDevice(this.deviceId, uri, startMs);
-    // Safety stop in case the game never sends stop (e.g. host tab throttled).
-    this.stopTimer = window.setTimeout(() => void this.pause(), durationMs);
+  private async transfer() {
+    if (!this.deviceId) return;
+    await transferPlayback(this.deviceId);
+    this.transferred = true;
   }
 
-  private clearTimer() {
-    if (this.stopTimer) clearTimeout(this.stopTimer);
-    this.stopTimer = null;
+  /** Wait (briefly) for the SDK device to exist. */
+  private async waitForDevice(timeoutMs: number): Promise<boolean> {
+    if (!this.player) await this.init();
+    const end = Date.now() + timeoutMs;
+    while (!this.deviceId && Date.now() < end) await sleep(100);
+    return !!this.deviceId;
+  }
+
+  /** Poll the SDK until the given track is actually playing. */
+  private async waitUntilPlaying(uri: string, timeoutMs: number): Promise<boolean> {
+    const end = Date.now() + timeoutMs;
+    while (Date.now() < end) {
+      const st = await this.player?.getCurrentState().catch(() => null);
+      if (st && !st.paused && !st.loading && sameTrack(st, uri)) return true;
+      await sleep(120);
+    }
+    return false;
+  }
+
+  private async startOnDevice(uri: string, startMs: number): Promise<void> {
+    if (!this.transferred) await this.transfer();
+    try {
+      await playOnDevice(this.deviceId!, uri, startMs);
+    } catch (e) {
+      // Device dropped or not active yet: re-transfer once and retry.
+      if (e instanceof SpotifyError && (e.status === 404 || e.status === 502 || e.status === 503)) {
+        await sleep(400);
+        await this.transfer();
+        await playOnDevice(this.deviceId!, uri, startMs);
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  async preload(uri: string, startMs: number) {
+    if (!this.activated || !(await this.waitForDevice(1000)) || !this.player) return;
+    try {
+      await this.player.setVolume(0);
+      await this.startOnDevice(uri, startMs);
+      if (await this.waitUntilPlaying(uri, 6000)) {
+        await this.player.pause();
+        await this.player.seek(startMs);
+        this.preloaded = { uri, startMs };
+      } else {
+        this.preloaded = null;
+      }
+    } catch {
+      this.preloaded = null;
+    } finally {
+      await this.player.setVolume(VOLUME).catch(() => undefined);
+    }
+  }
+
+  async play(uri: string, startMs: number): Promise<PlayResult> {
+    if (!this.activated) {
+      return { ok: false, error: 'The TV sound is locked by the browser. Click anywhere on the TV page, then Retry.' };
+    }
+    if (!(await this.waitForDevice(6000)) || !this.player) {
+      return { ok: false, error: 'The Spotify player is not connected. Check the TV has internet, then Retry.' };
+    }
+    try {
+      await this.player.setVolume(VOLUME).catch(() => undefined);
+      // Fast path: clip was buffered during the intro/reveal.
+      if (this.preloaded?.uri === uri) {
+        this.preloaded = null;
+        await this.player.resume();
+        if (await this.waitUntilPlaying(uri, 2500)) return { ok: true };
+      }
+      this.preloaded = null;
+      await this.startOnDevice(uri, startMs);
+      if (await this.waitUntilPlaying(uri, 9000)) return { ok: true };
+      return { ok: false, error: 'Spotify accepted the song but it never started playing.' };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   async pause() {
@@ -154,10 +256,10 @@ export class SpotifySdkProvider implements MusicProvider {
     }
   }
   async resume() {
-    await this.player?.resume();
+    await this.player?.resume().catch(() => undefined);
   }
   async stop() {
-    this.clearTimer();
+    this.preloaded = null;
     await this.pause();
   }
 }
